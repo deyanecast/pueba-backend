@@ -58,6 +58,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
             errorCodesToAdd: null);
+        
+        // Forzar IPv4 y configurar SSL
+        npgsqlOptions.KeepAlive = 30;
+        npgsqlOptions.TrustServerCertificate = true;
     });
     
     // Solo habilitar el seguimiento detallado en desarrollo
