@@ -10,6 +10,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 ENV ASPNETCORE_ENVIRONMENT=Production
+ENV PORT=5038
 ENV ASPNETCORE_URLS=http://+:5038
 EXPOSE 5038
 ENTRYPOINT ["dotnet", "MiBackend.dll"] 

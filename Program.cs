@@ -18,20 +18,24 @@ if (builder.Environment.IsDevelopment())
 }
 
 // Configuración del puerto
-var port = builder.Environment.IsDevelopment() ? "5001" : "5038";
-Console.WriteLine($"Ambiente: {builder.Environment.EnvironmentName}");
-Console.WriteLine($"Configurando la aplicación para usar el puerto: {port}");
+Console.WriteLine($"Ambiente detectado: {builder.Environment.EnvironmentName}");
+Console.WriteLine($"Variable ASPNETCORE_ENVIRONMENT: {Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}");
 
+string port;
 if (builder.Environment.IsDevelopment())
 {
+    port = "5001";
+    Console.WriteLine("Ambiente de desarrollo detectado, usando puerto 5001");
     builder.WebHost.UseUrls($"http://localhost:{port}", $"http://0.0.0.0:{port}");
 }
 else
 {
+    port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
+    Console.WriteLine($"Ambiente de producción detectado, usando puerto {port}");
     builder.WebHost.UseUrls($"http://+:{port}");
 }
 
-Console.WriteLine($"URLs configuradas para el ambiente {builder.Environment.EnvironmentName}");
+Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSetting(WebHostDefaults.ServerUrlsKey))}");
 
 // Obtener la cadena de conexión
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
