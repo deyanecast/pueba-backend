@@ -45,7 +45,7 @@ var connectionString = "Host=aws-0-us-west-1.pooler.supabase.com;" +
                       "Port=6543;" +
                       "SSL Mode=Require;" +
                       "Trust Server Certificate=true;" +
-                      "Pool Mode=Transaction";
+                      "pool_mode=transaction";
 
 Console.WriteLine("Usando cadena de conexión con transaction pooler para pruebas");
 Console.WriteLine($"Ambiente: {builder.Environment.EnvironmentName}");
