@@ -46,4 +46,6 @@ msbuild.wrn
 !.vscode/extensions.json
 
 # User secrets
-*.usersecrets.json 
+*.usersecrets.json bin/
+obj/
+*.dll

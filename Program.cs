@@ -1,8 +1,20 @@
 using Microsoft.EntityFrameworkCore;
 using MiBackend.Data;
 using MiBackend.Models;
+using DotNetEnv;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Cargar variables de entorno desde el archivo .env solo en desarrollo
+if (builder.Environment.IsDevelopment())
+{
+    var envFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+    if (File.Exists(envFilePath))
+    {
+        Env.Load(envFilePath);
+        Console.WriteLine("Variables de entorno cargadas desde: " + envFilePath);
+    }
+}
 
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
@@ -19,13 +31,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Get connection string from configuration
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Get connection string from environment variable
+var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
 Console.WriteLine($"Connection string loaded: {(string.IsNullOrEmpty(connectionString) ? "No" : "Yes")}");
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("DefaultConnection string is not configured");
+    throw new InvalidOperationException("CONNECTION_STRING environment variable is not set");
 }
 
 // Add DbContext
@@ -51,6 +63,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Health check endpoint
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 // Endpoints
 app.MapGet("/api/productos", async (ApplicationDbContext db) =>
