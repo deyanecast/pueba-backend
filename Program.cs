@@ -63,6 +63,11 @@ builder.Services.AddCors(options =>
 // Configuración de la base de datos
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+    }
     Console.WriteLine("Configurando conexión a la base de datos...");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
@@ -98,9 +103,9 @@ app.MapGet("/api/productos", async (ApplicationDbContext db, ILogger<Program> lo
 {
     try
     {
-        logger.LogInformation("Intentando obtener productos de la base de datos");
+        logger.LogInformation("Obteniendo lista de productos...");
         var productos = await db.Productos.ToListAsync();
-        logger.LogInformation($"Se obtuvieron {productos.Count} productos");
+        logger.LogInformation($"Se encontraron {productos.Count} productos");
         return Results.Ok(productos);
     }
     catch (Exception ex)
@@ -108,7 +113,7 @@ app.MapGet("/api/productos", async (ApplicationDbContext db, ILogger<Program> lo
         logger.LogError(ex, "Error al obtener productos");
         return Results.Problem(
             title: "Error al obtener productos",
-            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
+            detail: ex.Message + (ex.InnerException != null ? " - " + ex.InnerException.Message : ""),
             statusCode: 500
         );
     }
@@ -118,21 +123,21 @@ app.MapGet("/api/productos/{id}", async (int id, ApplicationDbContext db, ILogge
 {
     try
     {
-        logger.LogInformation($"Intentando obtener producto con ID: {id}");
+        logger.LogInformation($"Buscando producto con ID: {id}");
         var producto = await db.Productos.FindAsync(id);
         if (producto == null)
         {
-            logger.LogWarning($"No se encontró el producto con ID: {id}");
-            return Results.NotFound();
+            logger.LogWarning($"Producto con ID {id} no encontrado");
+            return Results.NotFound($"Producto con ID {id} no encontrado");
         }
         return Results.Ok(producto);
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, $"Error al obtener el producto con ID: {id}");
+        logger.LogError(ex, $"Error al obtener producto con ID {id}");
         return Results.Problem(
-            title: "Error al obtener el producto",
-            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
+            title: "Error al obtener producto",
+            detail: ex.Message + (ex.InnerException != null ? " - " + ex.InnerException.Message : ""),
             statusCode: 500
         );
     }
@@ -142,7 +147,7 @@ app.MapPost("/api/productos/test", async (ApplicationDbContext db, ILogger<Progr
 {
     try
     {
-        logger.LogInformation("Intentando crear producto de prueba");
+        logger.LogInformation("Creando producto de prueba...");
         var producto = new Producto
         {
             Nombre = "Camarón Jumbo",
@@ -151,7 +156,6 @@ app.MapPost("/api/productos/test", async (ApplicationDbContext db, ILogger<Progr
             TipoEmpaque = "Caja 5 libras",
             EstaActivo = true
         };
-
         db.Productos.Add(producto);
         await db.SaveChangesAsync();
         logger.LogInformation($"Producto de prueba creado con ID: {producto.ProductoId}");
@@ -159,10 +163,10 @@ app.MapPost("/api/productos/test", async (ApplicationDbContext db, ILogger<Progr
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error al crear el producto de prueba");
+        logger.LogError(ex, "Error al crear producto de prueba");
         return Results.Problem(
-            title: "Error al crear el producto de prueba",
-            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
+            title: "Error al crear producto",
+            detail: ex.Message + (ex.InnerException != null ? " - " + ex.InnerException.Message : ""),
             statusCode: 500
         );
     }
