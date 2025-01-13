@@ -41,7 +41,36 @@ Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSet
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("No se encontró la cadena de conexión 'DefaultConnection' en la configuración.");
+    // Intentar construir la cadena de conexión desde variables de entorno
+    var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
+    var database = Environment.GetEnvironmentVariable("POSTGRES_DATABASE");
+    var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
+    var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+    var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT");
+
+    Console.WriteLine($"Variables de entorno encontradas:");
+    Console.WriteLine($"Host: {host}");
+    Console.WriteLine($"Database: {database}");
+    Console.WriteLine($"User: {user}");
+    Console.WriteLine($"Port: {dbPort}");
+    Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
+
+    // Usar el transaction pooler agregando el prefijo "postgres" al host
+    var modifiedHost = host?.Replace("db.", "postgres.");
+    Console.WriteLine($"Host modificado para usar transaction pooler: {modifiedHost}");
+
+    connectionString = $"Host={modifiedHost};" +
+                      $"Database={database};" +
+                      $"Username={user};" +
+                      $"Password={password};" +
+                      $"Port={dbPort};" +
+                      "SSL Mode=Require;Trust Server Certificate=true;" +
+                      "Timeout=30;Command Timeout=30;Pooling=true;MinPoolSize=1;MaxPoolSize=20";
+}
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("No se pudo obtener la cadena de conexión ni de la configuración ni de las variables de entorno.");
 }
 Console.WriteLine("Cadena de conexión cargada correctamente");
 
@@ -63,11 +92,6 @@ builder.Services.AddCors(options =>
 // Configuración de la base de datos
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (string.IsNullOrEmpty(connectionString))
-    {
-        throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-    }
     Console.WriteLine("Configurando conexión a la base de datos...");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
