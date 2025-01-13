@@ -38,17 +38,28 @@ else
 Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSetting(WebHostDefaults.ServerUrlsKey))}");
 
 // Obtener la cadena de conexión
-var host = Environment.GetEnvironmentVariable("DB_HOST") ?? "aws-0-us-west-1.pooler.supabase.com";
-var database = Environment.GetEnvironmentVariable("DB_DATABASE") ?? "postgres";
-var username = Environment.GetEnvironmentVariable("DB_USERNAME") ?? "postgres.bgyeganjxxjzrogodwes";
-var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "LIh^dxDg6@X0W&";
-var port = Environment.GetEnvironmentVariable("DB_PORT") ?? "6543";
+var host = Environment.GetEnvironmentVariable("DB_HOST");
+var database = Environment.GetEnvironmentVariable("DB_DATABASE");
+var username = Environment.GetEnvironmentVariable("DB_USERNAME");
+var password = Environment.GetEnvironmentVariable("DB_PASSWORD");
+var dbPort = Environment.GetEnvironmentVariable("DB_PORT");
+
+// Verificar que todas las variables necesarias estén presentes
+if (string.IsNullOrEmpty(host) || 
+    string.IsNullOrEmpty(database) || 
+    string.IsNullOrEmpty(username) || 
+    string.IsNullOrEmpty(password) || 
+    string.IsNullOrEmpty(dbPort))
+{
+    throw new InvalidOperationException("Faltan variables de entorno necesarias para la conexión a la base de datos. " +
+        "Asegúrate de configurar: DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD, DB_PORT");
+}
 
 var connectionString = $"Host={host};" +
                       $"Database={database};" +
                       $"Username={username};" +
                       $"Password={password};" +
-                      $"Port={port};" +
+                      $"Port={dbPort};" +
                       "SSL Mode=Require;" +
                       "Trust Server Certificate=true";
 
