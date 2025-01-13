@@ -18,10 +18,13 @@ if (builder.Environment.IsDevelopment())
 }
 
 // Configurar el puerto
-string port = Environment.GetEnvironmentVariable("PORT") ?? "5038"; // Siempre intentar usar PORT de las variables de entorno primero
+string port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
+Console.WriteLine($"Variable de entorno PORT: {Environment.GetEnvironmentVariable("PORT")}");
+Console.WriteLine($"ASPNETCORE_ENVIRONMENT: {Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}");
+
 if (builder.Environment.IsDevelopment())
 {
-    port = "5001"; // Sobrescribir puerto solo en desarrollo
+    port = "5001";
     Console.WriteLine("Ejecutando en modo desarrollo, usando puerto 5001");
 }
 else
@@ -29,8 +32,10 @@ else
     Console.WriteLine($"Ejecutando en modo producción, usando puerto {port}");
 }
 
-builder.WebHost.UseUrls($"http://*:{port}");
-Console.WriteLine($"Configurado para escuchar en el puerto: {port}");
+// Configurar URLs
+var urls = $"http://*:{port}";
+builder.WebHost.UseUrls(urls);
+Console.WriteLine($"Configurado para escuchar en: {urls}");
 
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
