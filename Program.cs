@@ -5,7 +5,6 @@ using MiBackend.Interfaces.Services;
 using MiBackend.Repositories;
 using MiBackend.Services;
 using DotNetEnv;
-using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,30 +80,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.EnableDetailedErrors();
         options.EnableSensitiveDataLogging();
     }
-});
-
-// Configurar Npgsql global settings
-Npgsql.NpgsqlConnection.GlobalTypeMapper.UseJsonNet();
-
-// Configure connection pool
-builder.Services.Configure<Microsoft.EntityFrameworkCore.Infrastructure.DbContextOptionsBuilder>(options =>
-{
-    options.EnableDetailedErrors();
-    options.EnableSensitiveDataLogging();
-});
-
-builder.Services.AddPooledDbContextFactory<ApplicationDbContext>(options =>
-{
-    options.UseNpgsql(connectionString, npgsqlOptions =>
-    {
-        npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorCodesToAdd: null);
-        npgsqlOptions.CommandTimeout(30);
-        npgsqlOptions.MinBatchSize(1);
-        npgsqlOptions.MaxBatchSize(100);
-    });
 });
 
 // Configure DI
