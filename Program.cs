@@ -38,9 +38,9 @@ else
 Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSetting(WebHostDefaults.ServerUrlsKey))}");
 
 // Obtener la cadena de conexión
-var connectionString = "Host=db.bgyeganjxxjzrogodwes.supabase.co;Database=postgres;Username=postgres;Password=LIh^dxDg6@X0W&;Port=5432;SSL Mode=Require;Trust Server Certificate=true;Server Compatibility Mode=Redshift";
+var connectionString = "Host=session.bgyeganjxxjzrogodwes.supabase.co;Database=postgres;Username=postgres;Password=LIh^dxDg6@X0W&;Port=5432;SSL Mode=Require;Trust Server Certificate=true";
 
-Console.WriteLine("Usando cadena de conexión hardcodeada para pruebas");
+Console.WriteLine("Usando cadena de conexión con session pooler para pruebas");
 Console.WriteLine($"Ambiente: {builder.Environment.EnvironmentName}");
 
 // Configuración de servicios
