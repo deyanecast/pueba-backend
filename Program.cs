@@ -38,15 +38,21 @@ else
 Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSetting(WebHostDefaults.ServerUrlsKey))}");
 
 // Obtener la cadena de conexión
-var connectionString = "Host=aws-0-us-west-1.pooler.supabase.com;" +
-                      "Database=postgres;" +
-                      "Username=postgres.bgyeganjxxjzrogodwes;" +
-                      "Password=LIh^dxDg6@X0W&;" +
-                      "Port=6543;" +
+var host = Environment.GetEnvironmentVariable("DB_HOST") ?? "aws-0-us-west-1.pooler.supabase.com";
+var database = Environment.GetEnvironmentVariable("DB_DATABASE") ?? "postgres";
+var username = Environment.GetEnvironmentVariable("DB_USERNAME") ?? "postgres.bgyeganjxxjzrogodwes";
+var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "LIh^dxDg6@X0W&";
+var port = Environment.GetEnvironmentVariable("DB_PORT") ?? "6543";
+
+var connectionString = $"Host={host};" +
+                      $"Database={database};" +
+                      $"Username={username};" +
+                      $"Password={password};" +
+                      $"Port={port};" +
                       "SSL Mode=Require;" +
                       "Trust Server Certificate=true";
 
-Console.WriteLine("Usando cadena de conexión con transaction pooler para pruebas");
+Console.WriteLine("Cadena de conexión configurada con variables de entorno");
 Console.WriteLine($"Ambiente: {builder.Environment.EnvironmentName}");
 
 // Configuración de servicios
