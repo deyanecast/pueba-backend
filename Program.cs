@@ -74,6 +74,13 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         npgsqlOptions.MinBatchSize(1);
         npgsqlOptions.MaxBatchSize(100);
     });
+    
+    // Habilitar logging detallado
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableDetailedErrors();
+        options.EnableSensitiveDataLogging();
+    }
 });
 
 // Configurar Npgsql global settings
