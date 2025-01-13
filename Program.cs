@@ -41,37 +41,53 @@ Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSet
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
-    // Intentar construir la cadena de conexión desde variables de entorno
-    var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
-    var database = Environment.GetEnvironmentVariable("POSTGRES_DATABASE");
-    var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
-    var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
-    var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT");
+    // Intentar obtener la cadena de conexión completa primero
+    connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+    
+    // Si no hay cadena de conexión completa, construirla desde variables individuales
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
+        var database = Environment.GetEnvironmentVariable("POSTGRES_DATABASE");
+        var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
+        var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+        var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT");
 
-    Console.WriteLine($"Variables de entorno encontradas:");
-    Console.WriteLine($"Host: {host}");
-    Console.WriteLine($"Database: {database}");
-    Console.WriteLine($"User: {user}");
-    Console.WriteLine($"Port: {dbPort}");
-    Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
+        Console.WriteLine($"Variables de entorno encontradas:");
+        Console.WriteLine($"Host: {host}");
+        Console.WriteLine($"Database: {database}");
+        Console.WriteLine($"User: {user}");
+        Console.WriteLine($"Port: {dbPort}");
+        Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
 
-    // Usar IP directamente en lugar del hostname
-    var modifiedHost = "190.106.222.153";
-    Console.WriteLine($"Usando IP directamente: {modifiedHost}");
+        if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(database) || 
+            string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password) || 
+            string.IsNullOrEmpty(dbPort))
+        {
+            throw new InvalidOperationException("Faltan variables de entorno necesarias para la conexión a la base de datos.");
+        }
 
-    connectionString = $"Host={modifiedHost};" +
-                      $"Database={database};" +
-                      $"Username={user};" +
-                      $"Password={password};" +
-                      $"Port={dbPort};" +
-                      "SSL Mode=Require;Trust Server Certificate=true;" +
-                      "Timeout=30;Command Timeout=30;Pooling=true;MinPoolSize=1;MaxPoolSize=20";
+        connectionString = $"Host={host};" +
+                         $"Database={database};" +
+                         $"Username={user};" +
+                         $"Password={password};" +
+                         $"Port={dbPort};" +
+                         "SSL Mode=Require;" +
+                         "Trust Server Certificate=true;" +
+                         "Include Error Detail=true;" +
+                         "Pooling=true;" +
+                         "Minimum Pool Size=1;" +
+                         "Maximum Pool Size=20;" +
+                         "Connection Lifetime=0";
+    }
 }
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("No se pudo obtener la cadena de conexión ni de la configuración ni de las variables de entorno.");
+    throw new InvalidOperationException("No se pudo obtener la cadena de conexión de ninguna fuente.");
 }
+
+Console.WriteLine($"Ambiente: {builder.Environment.EnvironmentName}");
 Console.WriteLine("Cadena de conexión cargada correctamente");
 
 // Configuración de servicios
