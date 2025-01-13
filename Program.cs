@@ -41,45 +41,41 @@ Console.WriteLine($"URLs configuradas: {string.Join(", ", builder.WebHost.GetSet
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
-    // Intentar obtener la cadena de conexión completa primero
-    connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
-    
-    // Si no hay cadena de conexión completa, construirla desde variables individuales
-    if (string.IsNullOrEmpty(connectionString))
+    var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
+    var database = Environment.GetEnvironmentVariable("POSTGRES_DATABASE");
+    var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
+    var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+    var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT");
+
+    Console.WriteLine($"Variables de entorno encontradas:");
+    Console.WriteLine($"Host: {host}");
+    Console.WriteLine($"Database: {database}");
+    Console.WriteLine($"User: {user}");
+    Console.WriteLine($"Port: {dbPort}");
+    Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
+
+    if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(database) || 
+        string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password) || 
+        string.IsNullOrEmpty(dbPort))
     {
-        var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
-        var database = Environment.GetEnvironmentVariable("POSTGRES_DATABASE");
-        var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
-        var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
-        var dbPort = Environment.GetEnvironmentVariable("POSTGRES_PORT");
-
-        Console.WriteLine($"Variables de entorno encontradas:");
-        Console.WriteLine($"Host: {host}");
-        Console.WriteLine($"Database: {database}");
-        Console.WriteLine($"User: {user}");
-        Console.WriteLine($"Port: {dbPort}");
-        Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
-
-        if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(database) || 
-            string.IsNullOrEmpty(user) || string.IsNullOrEmpty(password) || 
-            string.IsNullOrEmpty(dbPort))
-        {
-            throw new InvalidOperationException("Faltan variables de entorno necesarias para la conexión a la base de datos.");
-        }
-
-        connectionString = $"Host={host};" +
-                         $"Database={database};" +
-                         $"Username={user};" +
-                         $"Password={password};" +
-                         $"Port={dbPort};" +
-                         "SSL Mode=Require;" +
-                         "Trust Server Certificate=true;" +
-                         "Include Error Detail=true;" +
-                         "Pooling=true;" +
-                         "Minimum Pool Size=1;" +
-                         "Maximum Pool Size=20;" +
-                         "Connection Lifetime=0";
+        throw new InvalidOperationException("Faltan variables de entorno necesarias para la conexión a la base de datos.");
     }
+
+    // Configuración específica según el ambiente
+    var sslMode = builder.Environment.IsDevelopment() ? "Require" : "VerifyFull";
+    var pooling = builder.Environment.IsDevelopment() ? "true" : "false";
+
+    connectionString = $"Host={host};" +
+                      $"Database={database};" +
+                      $"Username={user};" +
+                      $"Password={password};" +
+                      $"Port={dbPort};" +
+                      $"SSL Mode={sslMode};" +
+                      "Trust Server Certificate=true;" +
+                      "Include Error Detail=true;" +
+                      $"Pooling={pooling};" +
+                      "Command Timeout=60;" +
+                      "Timeout=60";
 }
 
 if (string.IsNullOrEmpty(connectionString))
@@ -111,10 +107,21 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     Console.WriteLine("Configurando conexión a la base de datos...");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorCodesToAdd: null);
+        if (builder.Environment.IsDevelopment())
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(30),
+                errorCodesToAdd: null);
+        }
+        else
+        {
+            // Configuración específica para producción
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 10,
+                maxRetryDelay: TimeSpan.FromSeconds(60),
+                errorCodesToAdd: null);
+        }
     });
 });
 
