@@ -16,6 +16,11 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
+// Configurar el puerto
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
+builder.WebHost.UseUrls($"http://*:{port}");
+Console.WriteLine($"Configurado para escuchar en el puerto: {port}");
+
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -65,7 +70,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Health check endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", port = port }));
 
 // Endpoints
 app.MapGet("/api/productos", async (ApplicationDbContext db) =>
