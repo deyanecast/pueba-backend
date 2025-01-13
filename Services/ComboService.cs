@@ -25,13 +25,20 @@ public class ComboService : IComboService
     public async Task<IEnumerable<ComboResponse>> GetAllAsync()
     {
         var combos = await _comboRepository.GetAllAsync();
-        return combos.Select(MapToResponse);
+        var responses = new List<ComboResponse>();
+        
+        foreach (var combo in combos)
+        {
+            responses.Add(await MapToResponse(combo));
+        }
+        
+        return responses;
     }
 
     public async Task<ComboResponse?> GetByIdAsync(int id)
     {
         var combo = await _comboRepository.GetByIdAsync(id);
-        return combo != null ? MapToResponse(combo) : null;
+        return combo != null ? await MapToResponse(combo) : null;
     }
 
     public async Task<ComboResponse> CreateAsync(CreateComboRequest request)
@@ -57,16 +64,16 @@ public class ComboService : IComboService
             Precio = request.Precio,
             EstaActivo = true,
             UltimaActualizacion = DateTime.UtcNow,
-            Productos = request.Productos.Select(p => new ComboProducto
+            Productos = request.Productos.Select(p => new ComboDetalle
             {
                 ProductoId = p.ProductoId,
-                Cantidad = p.Cantidad
+                CantidadLibras = p.Cantidad
             }).ToList()
         };
 
         var createdCombo = await _comboRepository.CreateAsync(combo);
         _logger.LogInformation("Combo creado exitosamente: {ComboId}", createdCombo.ComboId);
-        return MapToResponse(createdCombo);
+        return await MapToResponse(createdCombo);
     }
 
     public async Task<ComboResponse> UpdateAsync(int id, CreateComboRequest request)
@@ -77,32 +84,18 @@ public class ComboService : IComboService
             throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
         }
 
-        // Verificar productos
-        foreach (var producto in request.Productos)
-        {
-            var productoExistente = await _productoRepository.GetByIdAsync(producto.ProductoId);
-            if (productoExistente == null)
-            {
-                throw new InvalidOperationException($"El producto con ID {producto.ProductoId} no existe");
-            }
-            if (!productoExistente.EstaActivo)
-            {
-                throw new InvalidOperationException($"El producto {productoExistente.Nombre} no está activo");
-            }
-        }
-
         combo.Nombre = request.Nombre;
         combo.Descripcion = request.Descripcion;
         combo.Precio = request.Precio;
         combo.UltimaActualizacion = DateTime.UtcNow;
-        combo.Productos = request.Productos.Select(p => new ComboProducto
+        combo.Productos = request.Productos.Select(p => new ComboDetalle
         {
             ProductoId = p.ProductoId,
-            Cantidad = p.Cantidad
+            CantidadLibras = p.Cantidad
         }).ToList();
 
         var updatedCombo = await _comboRepository.UpdateAsync(combo);
-        return MapToResponse(updatedCombo);
+        return await MapToResponse(updatedCombo);
     }
 
     public async Task DeleteAsync(int id)
@@ -128,22 +121,22 @@ public class ComboService : IComboService
         combo.UltimaActualizacion = DateTime.UtcNow;
 
         var updatedCombo = await _comboRepository.UpdateAsync(combo);
-        return MapToResponse(updatedCombo);
+        return await MapToResponse(updatedCombo);
     }
 
     private async Task<ComboResponse> MapToResponse(Combo combo)
     {
         var productosResponse = new List<ComboProductoResponse>();
-        foreach (var comboProducto in combo.Productos)
+        foreach (var comboDetalle in combo.Productos)
         {
-            var producto = await _productoRepository.GetByIdAsync(comboProducto.ProductoId);
+            var producto = await _productoRepository.GetByIdAsync(comboDetalle.ProductoId);
             if (producto != null)
             {
                 productosResponse.Add(new ComboProductoResponse
                 {
                     ProductoId = producto.ProductoId,
                     NombreProducto = producto.Nombre,
-                    Cantidad = comboProducto.Cantidad,
+                    Cantidad = (int)comboDetalle.CantidadLibras,
                     PrecioUnitario = producto.PrecioPorLibra
                 });
             }
