@@ -61,21 +61,15 @@ if (string.IsNullOrEmpty(connectionString))
         throw new InvalidOperationException("Faltan variables de entorno necesarias para la conexión a la base de datos.");
     }
 
-    // Configuración específica según el ambiente
-    var sslMode = builder.Environment.IsDevelopment() ? "Require" : "VerifyFull";
-    var pooling = builder.Environment.IsDevelopment() ? "true" : "false";
-
+    // Usar la configuración exacta que proporciona Supabase
     connectionString = $"Host={host};" +
                       $"Database={database};" +
                       $"Username={user};" +
                       $"Password={password};" +
                       $"Port={dbPort};" +
-                      $"SSL Mode={sslMode};" +
+                      "SSL Mode=Require;" +
                       "Trust Server Certificate=true;" +
-                      "Include Error Detail=true;" +
-                      $"Pooling={pooling};" +
-                      "Command Timeout=60;" +
-                      "Timeout=60";
+                      "Server Compatibility Mode=Redshift";
 }
 
 if (string.IsNullOrEmpty(connectionString))
@@ -107,21 +101,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     Console.WriteLine("Configurando conexión a la base de datos...");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        if (builder.Environment.IsDevelopment())
-        {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorCodesToAdd: null);
-        }
-        else
-        {
-            // Configuración específica para producción
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 10,
-                maxRetryDelay: TimeSpan.FromSeconds(60),
-                errorCodesToAdd: null);
-        }
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(5),
+            errorCodesToAdd: null);
     });
 });
 
