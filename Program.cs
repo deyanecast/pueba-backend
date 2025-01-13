@@ -55,9 +55,9 @@ if (string.IsNullOrEmpty(connectionString))
     Console.WriteLine($"Port: {dbPort}");
     Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
 
-    // Usar el transaction pooler agregando el prefijo "postgres" al host
-    var modifiedHost = host?.Replace("db.", "postgres.");
-    Console.WriteLine($"Host modificado para usar transaction pooler: {modifiedHost}");
+    // Usar el session pooler en lugar del transaction pooler
+    var modifiedHost = host?.Replace("db.", "session.");
+    Console.WriteLine($"Host modificado para usar session pooler: {modifiedHost}");
 
     connectionString = $"Host={modifiedHost};" +
                       $"Database={database};" +
