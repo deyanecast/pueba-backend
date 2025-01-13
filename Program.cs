@@ -55,9 +55,9 @@ if (string.IsNullOrEmpty(connectionString))
     Console.WriteLine($"Port: {dbPort}");
     Console.WriteLine($"Password: {"*".PadRight(password?.Length ?? 0, '*')}");
 
-    // Usar el session pooler en lugar del transaction pooler
-    var modifiedHost = host?.Replace("db.", "session.");
-    Console.WriteLine($"Host modificado para usar session pooler: {modifiedHost}");
+    // Usar IP directamente en lugar del hostname
+    var modifiedHost = "190.106.222.153";
+    Console.WriteLine($"Usando IP directamente: {modifiedHost}");
 
     connectionString = $"Host={modifiedHost};" +
                       $"Database={database};" +
