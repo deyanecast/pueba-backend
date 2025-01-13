@@ -20,4 +20,14 @@ namespace MiBackend.Models
 
         public virtual ICollection<ComboDetalle> ComboDetalles { get; set; } = new List<ComboDetalle>();
     }
+
+    public class ComboProducto
+    {
+        public int ComboProductoId { get; set; }
+        public int ComboId { get; set; }
+        public int ProductoId { get; set; }
+        public int Cantidad { get; set; }
+        public required Combo Combo { get; set; }
+        public required Producto Producto { get; set; }
+    }
 } 
