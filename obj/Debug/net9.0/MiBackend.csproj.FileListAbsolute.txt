@@ -122,3 +122,12 @@
 /Users/deyane/Documents/GenesisPrueba/MiBackend/obj/Debug/net9.0/MiBackend.pdb
 /Users/deyane/Documents/GenesisPrueba/MiBackend/obj/Debug/net9.0/MiBackend.genruntimeconfig.cache
 /Users/deyane/Documents/GenesisPrueba/MiBackend/obj/Debug/net9.0/ref/MiBackend.dll
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/web.config
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/appsettings.Development.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/appsettings.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/MiBackend.deps.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/MiBackend.runtimeconfig.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/out/MiBackend.staticwebassets.endpoints.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/obj/Debug/net9.0/MiBackend.sourcelink.json
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/DotNetEnv.dll
+/Users/deyane/Documents/GenesisPrueba/MiBackend/bin/Debug/net9.0/Sprache.dll

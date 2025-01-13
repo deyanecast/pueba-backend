@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MiBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c3c3ed437a011bd90ca95b8053b4c8c6efeeeeaf")]
 [assembly: System.Reflection.AssemblyProductAttribute("MiBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MiBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
