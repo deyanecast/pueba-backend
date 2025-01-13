@@ -14,7 +14,7 @@ namespace MiBackend.Data
         public DbSet<Combo> Combos { get; set; }
         public DbSet<ComboDetalle> ComboDetalles { get; set; }
         public DbSet<Venta> Ventas { get; set; }
-        public DbSet<DetalleVenta> DetalleVentas { get; set; }
+        public DbSet<VentaItem> VentaItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -30,27 +30,15 @@ namespace MiBackend.Data
                 .HasColumnType("decimal(18,2)");
 
             modelBuilder.Entity<Combo>()
-                .Property(c => c.PrecioCombo)
+                .Property(c => c.Precio)
                 .HasColumnType("decimal(18,2)");
 
-            modelBuilder.Entity<ComboDetalle>()
-                .Property(cd => cd.CantidadLibras)
+            modelBuilder.Entity<VentaItem>()
+                .Property(v => v.PrecioUnitario)
                 .HasColumnType("decimal(18,2)");
 
             modelBuilder.Entity<Venta>()
                 .Property(v => v.MontoTotal)
-                .HasColumnType("decimal(18,2)");
-
-            modelBuilder.Entity<DetalleVenta>()
-                .Property(dv => dv.PrecioUnitario)
-                .HasColumnType("decimal(18,2)");
-
-            modelBuilder.Entity<DetalleVenta>()
-                .Property(dv => dv.Subtotal)
-                .HasColumnType("decimal(18,2)");
-
-            modelBuilder.Entity<DetalleVenta>()
-                .Property(dv => dv.CantidadLibras)
                 .HasColumnType("decimal(18,2)");
         }
     }

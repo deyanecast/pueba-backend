@@ -11,23 +11,23 @@ namespace MiBackend.Models
         public int ComboId { get; set; }
 
         [Required]
-        [Column("nombre_combo")]
-        public required string NombreCombo { get; set; }
+        [Column("nombre")]
+        public required string Nombre { get; set; }
 
         [Required]
-        [Column("precio_combo")]
-        public decimal PrecioCombo { get; set; }
+        [Column("descripcion")]
+        public required string Descripcion { get; set; }
 
-        public virtual ICollection<ComboDetalle> ComboDetalles { get; set; } = new List<ComboDetalle>();
-    }
+        [Required]
+        [Column("precio")]
+        public decimal Precio { get; set; }
 
-    public class ComboProducto
-    {
-        public int ComboProductoId { get; set; }
-        public int ComboId { get; set; }
-        public int ProductoId { get; set; }
-        public int Cantidad { get; set; }
-        public required Combo Combo { get; set; }
-        public required Producto Producto { get; set; }
+        [Column("esta_activo")]
+        public bool EstaActivo { get; set; } = true;
+
+        [Column("ultima_actualizacion")]
+        public DateTime UltimaActualizacion { get; set; } = DateTime.UtcNow;
+
+        public virtual ICollection<ComboDetalle> Productos { get; set; } = new List<ComboDetalle>();
     }
 } 
