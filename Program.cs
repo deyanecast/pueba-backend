@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using MiBackend.Data;
 using MiBackend.Models;
 using DotNetEnv;
+using Polly;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,10 +46,16 @@ if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException("CONNECTION_STRING environment variable is not set");
 }
 
-// Add DbContext
+// Add DbContext with retry policy
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorCodesToAdd: null);
+    });
     
     // Solo habilitar el seguimiento detallado en desarrollo
     if (builder.Environment.IsDevelopment())
@@ -70,51 +77,63 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Health check endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", port = port }));
+app.MapGet("/health", () => Results.Ok(new { 
+    status = "healthy", 
+    port = port,
+    environment = app.Environment.EnvironmentName,
+    dbConnectionConfigured = !string.IsNullOrEmpty(connectionString)
+}));
 
 // Endpoints
-app.MapGet("/api/productos", async (ApplicationDbContext db) =>
+app.MapGet("/api/productos", async (ApplicationDbContext db, ILogger<Program> logger) =>
 {
     try
     {
+        logger.LogInformation("Intentando obtener productos de la base de datos");
         var productos = await db.Productos.ToListAsync();
+        logger.LogInformation($"Se obtuvieron {productos.Count} productos");
         return Results.Ok(productos);
     }
     catch (Exception ex)
     {
+        logger.LogError(ex, "Error al obtener productos");
         return Results.Problem(
             title: "Error al obtener productos",
-            detail: ex.Message,
+            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
             statusCode: 500
         );
     }
 });
 
-app.MapGet("/api/productos/{id}", async (int id, ApplicationDbContext db) =>
+app.MapGet("/api/productos/{id}", async (int id, ApplicationDbContext db, ILogger<Program> logger) =>
 {
     try
     {
+        logger.LogInformation($"Intentando obtener producto con ID: {id}");
         var producto = await db.Productos.FindAsync(id);
         if (producto == null)
         {
+            logger.LogWarning($"No se encontró el producto con ID: {id}");
             return Results.NotFound();
         }
         return Results.Ok(producto);
     }
     catch (Exception ex)
     {
+        logger.LogError(ex, $"Error al obtener el producto con ID: {id}");
         return Results.Problem(
             title: "Error al obtener el producto",
-            detail: ex.Message,
+            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
             statusCode: 500
         );
     }
 });
 
-app.MapPost("/api/productos/test", async (ApplicationDbContext db) =>
+app.MapPost("/api/productos/test", async (ApplicationDbContext db, ILogger<Program> logger) =>
 {
     try
     {
+        logger.LogInformation("Intentando crear producto de prueba");
         var producto = new Producto
         {
             Nombre = "Camarón Jumbo",
@@ -126,14 +145,15 @@ app.MapPost("/api/productos/test", async (ApplicationDbContext db) =>
 
         db.Productos.Add(producto);
         await db.SaveChangesAsync();
-
+        logger.LogInformation($"Producto de prueba creado con ID: {producto.ProductoId}");
         return Results.Ok(producto);
     }
     catch (Exception ex)
     {
+        logger.LogError(ex, "Error al crear el producto de prueba");
         return Results.Problem(
             title: "Error al crear el producto de prueba",
-            detail: ex.Message,
+            detail: $"Error: {ex.Message}. Inner Exception: {ex.InnerException?.Message}",
             statusCode: 500
         );
     }
