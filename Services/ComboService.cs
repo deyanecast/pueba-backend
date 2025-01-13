@@ -3,6 +3,7 @@ using MiBackend.DTOs.Responses;
 using MiBackend.Interfaces.Repositories;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace MiBackend.Services;
 
@@ -43,16 +44,26 @@ public class ComboService : IComboService
 
     public async Task<ComboResponse> CreateAsync(CreateComboRequest request)
     {
-        // Verificar que todos los productos existan y estén activos
+        _logger.LogInformation("Iniciando creación de combo con {Count} productos", request.Productos.Count);
+        
+        // Obtener todos los productos primero
+        var productos = await _productoRepository.GetAllAsync();
+        var productosDict = productos.ToDictionary(p => p.ProductoId);
+
         foreach (var producto in request.Productos)
         {
-            var productoExistente = await _productoRepository.GetByIdAsync(producto.ProductoId);
-            if (productoExistente == null)
+            _logger.LogInformation("Verificando producto con ID {ProductoId}", producto.ProductoId);
+            
+            if (!productosDict.TryGetValue(producto.ProductoId, out var productoExistente))
             {
+                _logger.LogWarning("Producto con ID {ProductoId} no encontrado", producto.ProductoId);
                 throw new InvalidOperationException($"El producto con ID {producto.ProductoId} no existe");
             }
+
             if (!productoExistente.EstaActivo)
             {
+                _logger.LogWarning("Producto {ProductoId} - {Nombre} está inactivo", 
+                    productoExistente.ProductoId, productoExistente.Nombre);
                 throw new InvalidOperationException($"El producto {productoExistente.Nombre} no está activo");
             }
         }
@@ -82,6 +93,23 @@ public class ComboService : IComboService
         if (combo == null)
         {
             throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
+        }
+
+        // Verificar productos igual que en CreateAsync
+        var productos = await _productoRepository.GetAllAsync();
+        var productosDict = productos.ToDictionary(p => p.ProductoId);
+
+        foreach (var producto in request.Productos)
+        {
+            if (!productosDict.TryGetValue(producto.ProductoId, out var productoExistente))
+            {
+                throw new InvalidOperationException($"El producto con ID {producto.ProductoId} no existe");
+            }
+
+            if (!productoExistente.EstaActivo)
+            {
+                throw new InvalidOperationException($"El producto {productoExistente.Nombre} no está activo");
+            }
         }
 
         combo.Nombre = request.Nombre;
@@ -126,11 +154,13 @@ public class ComboService : IComboService
 
     private async Task<ComboResponse> MapToResponse(Combo combo)
     {
+        var productos = await _productoRepository.GetAllAsync();
+        var productosDict = productos.ToDictionary(p => p.ProductoId);
         var productosResponse = new List<ComboProductoResponse>();
+
         foreach (var comboDetalle in combo.Productos)
         {
-            var producto = await _productoRepository.GetByIdAsync(comboDetalle.ProductoId);
-            if (producto != null)
+            if (productosDict.TryGetValue(comboDetalle.ProductoId, out var producto))
             {
                 productosResponse.Add(new ComboProductoResponse
                 {

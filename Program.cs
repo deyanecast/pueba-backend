@@ -78,6 +78,14 @@ builder.Services.AddScoped<IProductoService, ProductoService>();
 builder.Services.AddScoped<IComboService, ComboService>();
 builder.Services.AddScoped<IVentaService, VentaService>();
 
+// Configurar logging
+builder.Services.AddLogging(logging =>
+{
+    logging.ClearProviders();
+    logging.AddConsole();
+    logging.AddDebug();
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
