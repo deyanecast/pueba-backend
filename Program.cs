@@ -18,7 +18,18 @@ if (builder.Environment.IsDevelopment())
 }
 
 // Configurar el puerto
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
+string port;
+if (builder.Environment.IsDevelopment())
+{
+    port = "5001"; // Puerto para desarrollo local
+    Console.WriteLine("Ejecutando en modo desarrollo, usando puerto 5001");
+}
+else
+{
+    port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
+    Console.WriteLine("Ejecutando en modo producción, usando puerto desde variable de entorno");
+}
+
 builder.WebHost.UseUrls($"http://*:{port}");
 Console.WriteLine($"Configurado para escuchar en el puerto: {port}");
 
@@ -37,13 +48,16 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Get connection string from environment variable
-var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+// Get connection string from environment variable or configuration
+var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING") 
+    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
+Console.WriteLine($"Connection string source: {(Environment.GetEnvironmentVariable("CONNECTION_STRING") != null ? "Environment Variable" : "Configuration")}");
 Console.WriteLine($"Connection string loaded: {(string.IsNullOrEmpty(connectionString) ? "No" : "Yes")}");
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("CONNECTION_STRING environment variable is not set");
+    throw new InvalidOperationException("No se encontró la cadena de conexión en las variables de entorno ni en la configuración");
 }
 
 // Add DbContext with retry policy
@@ -81,7 +95,8 @@ app.MapGet("/health", () => Results.Ok(new {
     status = "healthy", 
     port = port,
     environment = app.Environment.EnvironmentName,
-    dbConnectionConfigured = !string.IsNullOrEmpty(connectionString)
+    dbConnectionConfigured = !string.IsNullOrEmpty(connectionString),
+    connectionStringSource = Environment.GetEnvironmentVariable("CONNECTION_STRING") != null ? "Environment Variable" : "Configuration"
 }));
 
 // Endpoints
