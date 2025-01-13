@@ -10,7 +10,5 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV PORT=5038
-ENV ASPNETCORE_URLS=http://+:${PORT}
-EXPOSE ${PORT}
+EXPOSE 5038
 ENTRYPOINT ["dotnet", "MiBackend.dll"] 
