@@ -18,16 +18,15 @@ if (builder.Environment.IsDevelopment())
 }
 
 // Configurar el puerto
-string port;
+string port = Environment.GetEnvironmentVariable("PORT") ?? "5038"; // Siempre intentar usar PORT de las variables de entorno primero
 if (builder.Environment.IsDevelopment())
 {
-    port = "5001"; // Puerto para desarrollo local
+    port = "5001"; // Sobrescribir puerto solo en desarrollo
     Console.WriteLine("Ejecutando en modo desarrollo, usando puerto 5001");
 }
 else
 {
-    port = Environment.GetEnvironmentVariable("PORT") ?? "5038";
-    Console.WriteLine("Ejecutando en modo producción, usando puerto desde variable de entorno");
+    Console.WriteLine($"Ejecutando en modo producción, usando puerto {port}");
 }
 
 builder.WebHost.UseUrls($"http://*:{port}");
