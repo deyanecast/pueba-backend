@@ -17,59 +17,60 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
-// Configuración simplificada del puerto
-var port = "5038"; // Puerto fijo para producción
-Console.WriteLine($"Configurando la aplicación para usar el puerto: {port}");
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+// Configuración del puerto
+string port;
+if (builder.Environment.IsDevelopment())
+{
+    port = "5001";
+    Console.WriteLine("Ambiente de desarrollo detectado, usando puerto 5001");
+}
+else
+{
+    port = "5038";
+    Console.WriteLine("Ambiente de producción detectado, usando puerto 5038");
+}
 
-// Add services to the container.
+Console.WriteLine($"Configurando la aplicación para usar el puerto: {port}");
+
+// Configurar URLs para escuchar en todas las interfaces
+var urls = new[] { $"http://localhost:{port}", $"http://0.0.0.0:{port}" };
+builder.WebHost.UseUrls(urls);
+Console.WriteLine($"URLs configuradas: {string.Join(", ", urls)}");
+
+// Obtener la cadena de conexión
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("No se encontró la cadena de conexión 'DefaultConnection' en la configuración.");
+}
+Console.WriteLine("Cadena de conexión cargada correctamente");
+
+// Configuración de servicios
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add CORS
+// Configuración de CORS
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(builder =>
+    options.AddDefaultPolicy(policy =>
     {
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 
-// Get connection string from environment variable or configuration
-var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING") 
-    ?? builder.Configuration.GetConnectionString("DefaultConnection");
-
-Console.WriteLine($"Connection string source: {(Environment.GetEnvironmentVariable("CONNECTION_STRING") != null ? "Environment Variable" : "Configuration")}");
-Console.WriteLine($"Connection string loaded: {(string.IsNullOrEmpty(connectionString) ? "No" : "Yes")}");
-
-if (string.IsNullOrEmpty(connectionString))
-{
-    throw new InvalidOperationException("No se encontró la cadena de conexión en las variables de entorno ni en la configuración");
-}
-
-// Add DbContext with retry policy
+// Configuración de la base de datos
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
+    Console.WriteLine("Configurando conexión a la base de datos...");
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
         npgsqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(30),
             errorCodesToAdd: null);
-        
-        // Forzar IPv4 y configurar SSL
-        npgsqlOptions.KeepAlive = 30;
-        npgsqlOptions.TrustServerCertificate = true;
     });
-    
-    // Solo habilitar el seguimiento detallado en desarrollo
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableSensitiveDataLogging();
-        options.EnableDetailedErrors();
-    }
 });
 
 var app = builder.Build();
