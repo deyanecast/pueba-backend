@@ -4,27 +4,28 @@ namespace MiBackend.DTOs.Requests;
 
 public class CreateVentaRequest
 {
-    [Required(ErrorMessage = "El cliente es requerido")]
-    [StringLength(100, ErrorMessage = "El nombre del cliente no puede tener más de 100 caracteres")]
-    public required string Cliente { get; set; }
+    [Required]
+    public string Cliente { get; set; }
 
-    [Required(ErrorMessage = "Se requiere al menos un producto o combo")]
-    [MinLength(1, ErrorMessage = "La venta debe tener al menos un ítem")]
-    public required List<VentaItemRequest> Items { get; set; }
+    public string Observaciones { get; set; }
 
-    [StringLength(500, ErrorMessage = "Las observaciones no pueden tener más de 500 caracteres")]
-    public string? Observaciones { get; set; }
+    [Required]
+    public string TipoVenta { get; set; }
+
+    [Required]
+    public List<VentaDetalleRequest> Detalles { get; set; }
 }
 
-public class VentaItemRequest
+public class VentaDetalleRequest
 {
-    [Required(ErrorMessage = "El tipo de ítem es requerido")]
-    public required string TipoItem { get; set; } // "Producto" o "Combo"
+    [Required]
+    public string TipoItem { get; set; }  // "PRODUCTO" o "COMBO"
 
-    [Required(ErrorMessage = "El ID del ítem es requerido")]
-    public int ItemId { get; set; }
+    public int? ProductoId { get; set; }
+    
+    public int? ComboId { get; set; }
 
-    [Required(ErrorMessage = "La cantidad es requerida")]
-    [Range(1, 1000, ErrorMessage = "La cantidad debe estar entre 1 y 1000")]
-    public int Cantidad { get; set; }
+    [Required]
+    [Range(0.01, double.MaxValue, ErrorMessage = "La cantidad debe ser mayor a 0")]
+    public decimal CantidadLibras { get; set; }
 } 

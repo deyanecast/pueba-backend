@@ -1,145 +1,155 @@
+using Microsoft.EntityFrameworkCore;
+using MiBackend.Data;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
-using MiBackend.Interfaces.Repositories;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
 
-namespace MiBackend.Services;
-
-public class ProductoService : IProductoService
+namespace MiBackend.Services
 {
-    private readonly IGenericRepository<Producto> _productoRepository;
-    private readonly ILogger<ProductoService> _logger;
-
-    public ProductoService(IGenericRepository<Producto> productoRepository, ILogger<ProductoService> logger)
+    public class ProductoService : IProductoService
     {
-        _productoRepository = productoRepository;
-        _logger = logger;
-    }
+        private readonly ApplicationDbContext _context;
 
-    public async Task<IEnumerable<ProductoResponse>> GetAllAsync()
-    {
-        var productos = await _productoRepository.GetAllAsync();
-        return productos.Select(MapToResponse);
-    }
-
-    public async Task<ProductoResponse?> GetByIdAsync(int id)
-    {
-        var producto = await _productoRepository.GetByIdAsync(id);
-        return producto != null ? MapToResponse(producto) : null;
-    }
-
-    public async Task<ProductoResponse> CreateAsync(CreateProductoRequest request)
-    {
-        // Verificar si ya existe un producto con el mismo nombre y tipo de empaque
-        var productos = await _productoRepository.GetAllAsync();
-        var existingProduct = productos.FirstOrDefault(p => 
-            p.Nombre.Equals(request.Nombre, StringComparison.OrdinalIgnoreCase) &&
-            p.TipoEmpaque == request.TipoEmpaque &&
-            p.CantidadLibras == request.CantidadLibras);
-
-        if (existingProduct != null)
+        public ProductoService(ApplicationDbContext context)
         {
-            _logger.LogWarning("Intento de crear producto duplicado: {Nombre}, {TipoEmpaque}, {CantidadLibras}", 
-                request.Nombre, request.TipoEmpaque, request.CantidadLibras);
-            throw new InvalidOperationException("Ya existe un producto con las mismas características");
+            _context = context;
         }
 
-        var producto = new Producto
+        public async Task<ProductoResponse> CreateProductoAsync(CreateProductoRequest request)
         {
-            Nombre = request.Nombre,
-            CantidadLibras = request.CantidadLibras,
-            PrecioPorLibra = request.PrecioPorLibra,
-            TipoEmpaque = request.TipoEmpaque,
-            EstaActivo = true
-        };
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                var producto = new Producto
+                {
+                    Nombre = request.Nombre,
+                    CantidadLibras = request.CantidadLibras,
+                    PrecioPorLibra = request.PrecioPorLibra,
+                    TipoEmpaque = request.TipoEmpaque,
+                    EstaActivo = true,
+                    UltimaActualizacion = DateTime.UtcNow
+                };
 
-        var createdProducto = await _productoRepository.CreateAsync(producto);
-        _logger.LogInformation("Producto creado exitosamente: {ProductoId}", createdProducto.ProductoId);
-        return MapToResponse(createdProducto);
-    }
+                _context.Productos.Add(producto);
+                await _context.SaveChangesAsync();
 
-    public async Task<ProductoResponse> UpdateAsync(int id, UpdateProductoRequest request)
-    {
-        var producto = await _productoRepository.GetByIdAsync(id);
-        if (producto == null)
-        {
-            throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+                return MapProductoToResponse(producto);
+            });
         }
 
-        producto.Nombre = request.Nombre;
-        producto.CantidadLibras = request.CantidadLibras;
-        producto.PrecioPorLibra = request.PrecioPorLibra;
-        producto.TipoEmpaque = request.TipoEmpaque;
-
-        var updatedProducto = await _productoRepository.UpdateAsync(producto);
-        return MapToResponse(updatedProducto);
-    }
-
-    public async Task DeleteAsync(int id)
-    {
-        var exists = await _productoRepository.ExistsAsync(id);
-        if (!exists)
+        public async Task<List<ProductoResponse>> GetProductosAsync()
         {
-            throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+            var productos = await _context.Productos
+                .OrderBy(p => p.Nombre)
+                .ToListAsync();
+
+            return productos.Select(MapProductoToResponse).ToList();
         }
 
-        await _productoRepository.DeleteAsync(id);
-    }
-
-    public async Task<ProductoResponse> ToggleEstadoAsync(int id)
-    {
-        var producto = await _productoRepository.GetByIdAsync(id);
-        if (producto == null)
+        public async Task<ProductoResponse> GetProductoByIdAsync(int id)
         {
-            throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+            var producto = await _context.Productos.FindAsync(id);
+            if (producto == null)
+                throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+
+            return MapProductoToResponse(producto);
         }
 
-        producto.EstaActivo = !producto.EstaActivo;
-        var updatedProducto = await _productoRepository.UpdateAsync(producto);
-        return MapToResponse(updatedProducto);
-    }
-
-    public async Task<IEnumerable<ProductoResponse>> BuscarAsync(string? nombre, decimal? precioMin, decimal? precioMax, bool? activo)
-    {
-        var productos = await _productoRepository.GetAllAsync();
-        
-        var query = productos.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(nombre))
+        public async Task<List<ProductoResponse>> GetActiveProductosAsync()
         {
-            query = query.Where(p => p.Nombre.Contains(nombre, StringComparison.OrdinalIgnoreCase));
+            var productos = await _context.Productos
+                .Where(p => p.EstaActivo)
+                .OrderBy(p => p.Nombre)
+                .ToListAsync();
+
+            return productos.Select(MapProductoToResponse).ToList();
         }
 
-        if (precioMin.HasValue)
+        public async Task<ProductoResponse> UpdateProductoAsync(int id, UpdateProductoRequest request)
         {
-            query = query.Where(p => p.PrecioPorLibra >= precioMin.Value);
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                var producto = await _context.Productos.FindAsync(id);
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+
+                producto.Nombre = request.Nombre;
+                producto.PrecioPorLibra = request.PrecioPorLibra;
+                producto.TipoEmpaque = request.TipoEmpaque;
+                producto.UltimaActualizacion = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return MapProductoToResponse(producto);
+            });
         }
 
-        if (precioMax.HasValue)
+        public async Task<bool> UpdateProductoStatusAsync(int id, bool isActive)
         {
-            query = query.Where(p => p.PrecioPorLibra <= precioMax.Value);
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                var producto = await _context.Productos.FindAsync(id);
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+
+                producto.EstaActivo = isActive;
+                producto.UltimaActualizacion = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return true;
+            });
         }
 
-        if (activo.HasValue)
+        public async Task<bool> ValidateProductoStockAsync(int productoId, decimal cantidadLibras)
         {
-            query = query.Where(p => p.EstaActivo == activo.Value);
+            var producto = await _context.Productos.FindAsync(productoId);
+            if (producto == null)
+                throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+
+            return producto.EstaActivo && producto.CantidadLibras >= cantidadLibras;
         }
 
-        return query.Select(MapToResponse);
-    }
-
-    private static ProductoResponse MapToResponse(Producto producto)
-    {
-        return new ProductoResponse
+        public async Task<bool> UpdateProductoStockAsync(int productoId, decimal cantidadLibras, bool isAddition)
         {
-            ProductoId = producto.ProductoId,
-            Nombre = producto.Nombre,
-            CantidadLibras = producto.CantidadLibras,
-            PrecioPorLibra = producto.PrecioPorLibra,
-            TipoEmpaque = producto.TipoEmpaque,
-            EstaActivo = producto.EstaActivo,
-            UltimaActualizacion = DateTime.UtcNow
-        };
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                var producto = await _context.Productos.FindAsync(productoId);
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+
+                if (isAddition)
+                {
+                    producto.CantidadLibras += cantidadLibras;
+                }
+                else
+                {
+                    if (producto.CantidadLibras < cantidadLibras)
+                        throw new InvalidOperationException($"Stock insuficiente para el producto {producto.Nombre}");
+
+                    producto.CantidadLibras -= cantidadLibras;
+                }
+
+                producto.UltimaActualizacion = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return true;
+            });
+        }
+
+        private static ProductoResponse MapProductoToResponse(Producto producto)
+        {
+            return new ProductoResponse
+            {
+                ProductoId = producto.ProductoId,
+                Nombre = producto.Nombre,
+                CantidadLibras = producto.CantidadLibras,
+                PrecioPorLibra = producto.PrecioPorLibra,
+                TipoEmpaque = producto.TipoEmpaque,
+                EstaActivo = producto.EstaActivo,
+                UltimaActualizacion = producto.UltimaActualizacion
+            };
+        }
     }
 } 

@@ -1,5 +1,7 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using MiBackend.DTOs.Requests;
+using MiBackend.DTOs.Responses;
 using MiBackend.Interfaces.Services;
 
 namespace MiBackend.Controllers;
@@ -9,55 +11,23 @@ namespace MiBackend.Controllers;
 public class CombosController : ControllerBase
 {
     private readonly IComboService _comboService;
-    private readonly ILogger<CombosController> _logger;
 
-    public CombosController(IComboService comboService, ILogger<CombosController> logger)
+    public CombosController(IComboService comboService)
     {
         _comboService = comboService;
-        _logger = logger;
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        try
-        {
-            var combos = await _comboService.GetAllAsync();
-            return Ok(combos);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener combos");
-            return StatusCode(500, new { message = "Error interno del servidor" });
-        }
-    }
-
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(int id)
-    {
-        try
-        {
-            var combo = await _comboService.GetByIdAsync(id);
-            if (combo == null)
-            {
-                return NotFound(new { message = $"Combo con ID {id} no encontrado" });
-            }
-            return Ok(combo);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener combo {Id}", id);
-            return StatusCode(500, new { message = "Error interno del servidor" });
-        }
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateComboRequest request)
+    public async Task<ActionResult<ComboResponse>> CreateCombo([FromBody] CreateComboRequest request)
     {
         try
         {
-            var combo = await _comboService.CreateAsync(request);
-            return CreatedAtAction(nameof(GetById), new { id = combo.ComboId }, combo);
+            var response = await _comboService.CreateComboAsync(request);
+            return CreatedAtAction(nameof(GetComboById), new { id = response.ComboId }, response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -65,65 +35,128 @@ public class CombosController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al crear combo");
-            return StatusCode(500, new { message = "Error interno del servidor" });
+            return StatusCode(500, new { message = "Error al crear el combo", error = ex.Message });
         }
     }
 
-    [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] CreateComboRequest request)
+    [HttpGet]
+    public async Task<ActionResult<List<ComboResponse>>> GetCombos()
     {
         try
         {
-            var combo = await _comboService.UpdateAsync(id, request);
+            var combos = await _comboService.GetCombosAsync();
+            return Ok(combos);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al obtener los combos", error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ComboResponse>> GetComboById(int id)
+    {
+        try
+        {
+            var combo = await _comboService.GetComboByIdAsync(id);
             return Ok(combo);
         }
-        catch (KeyNotFoundException ex)
+        catch (KeyNotFoundException)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(new { message = $"Combo con ID {id} no encontrado" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al actualizar combo {Id}", id);
-            return StatusCode(500, new { message = "Error interno del servidor" });
+            return StatusCode(500, new { message = "Error al obtener el combo", error = ex.Message });
         }
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    [HttpGet("active")]
+    public async Task<ActionResult<List<ComboResponse>>> GetActiveCombos()
     {
         try
         {
-            await _comboService.DeleteAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
+            var combos = await _comboService.GetActiveCombosAsync();
+            return Ok(combos);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al eliminar combo {Id}", id);
-            return StatusCode(500, new { message = "Error interno del servidor" });
+            return StatusCode(500, new { message = "Error al obtener los combos activos", error = ex.Message });
         }
     }
 
-    [HttpPatch("{id}/toggle-estado")]
-    public async Task<IActionResult> ToggleEstado(int id)
+    [HttpPatch("{id}/status")]
+    [Consumes("application/json")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> UpdateComboStatus(int id, [FromBody] UpdateStatusRequest request)
     {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
         try
         {
-            var combo = await _comboService.ToggleEstadoAsync(id);
-            return Ok(combo);
+            await _comboService.UpdateComboStatusAsync(id, request.IsActive);
+            return Ok(new { message = $"Estado del combo actualizado a {(request.IsActive ? "activo" : "inactivo")}" });
         }
-        catch (KeyNotFoundException ex)
+        catch (KeyNotFoundException)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(new { message = $"Combo con ID {id} no encontrado" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al cambiar estado del combo {Id}", id);
-            return StatusCode(500, new { message = "Error interno del servidor" });
+            return StatusCode(500, new { message = "Error al actualizar el estado del combo", error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/validate-stock")]
+    public async Task<ActionResult<bool>> ValidateComboStock(int id, [FromQuery] decimal cantidad)
+    {
+        try
+        {
+            var isValid = await _comboService.ValidateComboStockAsync(id, cantidad);
+            return Ok(new { hasStock = isValid });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = $"Combo con ID {id} no encontrado" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al validar el stock del combo", error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id}/calculate-total")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<decimal>> CalculateComboTotal(int id, [FromQuery, Required] decimal cantidad)
+    {
+        if (cantidad <= 0)
+        {
+            return BadRequest(new { message = "La cantidad debe ser mayor a 0" });
+        }
+
+        try
+        {
+            var total = await _comboService.CalculateComboTotalAsync(id, cantidad);
+            return Ok(new { total });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = $"Combo con ID {id} no encontrado" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al calcular el total del combo", error = ex.Message });
         }
     }
 } 

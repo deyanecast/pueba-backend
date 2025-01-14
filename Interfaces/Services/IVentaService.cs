@@ -1,12 +1,14 @@
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
 
-namespace MiBackend.Interfaces.Services;
-
-public interface IVentaService
+namespace MiBackend.Interfaces.Services
 {
-    Task<IEnumerable<VentaResponse>> GetAllAsync();
-    Task<VentaResponse?> GetByIdAsync(int id);
-    Task<VentaResponse> CreateAsync(CreateVentaRequest request);
-    Task<object> GenerarReporteAsync(DateTime? fechaInicio, DateTime? fechaFin, string? cliente);
+    public interface IVentaService
+    {
+        Task<VentaResponse> CreateVentaAsync(CreateVentaRequest request);
+        Task<List<VentaResponse>> GetVentasAsync();
+        Task<VentaResponse> GetVentaByIdAsync(int id);
+        Task<List<VentaResponse>> GetVentasByDateRangeAsync(DateTime startDate, DateTime endDate);
+        Task<decimal> GetTotalVentasByDateAsync(DateTime date);
+    }
 } 

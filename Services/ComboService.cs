@@ -1,186 +1,183 @@
+using Microsoft.EntityFrameworkCore;
+using MiBackend.Data;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
-using MiBackend.Interfaces.Repositories;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
-using Microsoft.EntityFrameworkCore;
 
-namespace MiBackend.Services;
-
-public class ComboService : IComboService
+namespace MiBackend.Services
 {
-    private readonly IGenericRepository<Combo> _comboRepository;
-    private readonly IGenericRepository<Producto> _productoRepository;
-    private readonly ILogger<ComboService> _logger;
-
-    public ComboService(
-        IGenericRepository<Combo> comboRepository,
-        IGenericRepository<Producto> productoRepository,
-        ILogger<ComboService> logger)
+    public class ComboService : IComboService
     {
-        _comboRepository = comboRepository;
-        _productoRepository = productoRepository;
-        _logger = logger;
-    }
+        private readonly ApplicationDbContext _context;
+        private readonly IProductoService _productoService;
 
-    public async Task<IEnumerable<ComboResponse>> GetAllAsync()
-    {
-        var combos = await _comboRepository.GetAllAsync();
-        var responses = new List<ComboResponse>();
-        
-        foreach (var combo in combos)
+        public ComboService(
+            ApplicationDbContext context,
+            IProductoService productoService)
         {
-            responses.Add(await MapToResponse(combo));
-        }
-        
-        return responses;
-    }
-
-    public async Task<ComboResponse?> GetByIdAsync(int id)
-    {
-        var combo = await _comboRepository.GetByIdAsync(id);
-        return combo != null ? await MapToResponse(combo) : null;
-    }
-
-    public async Task<ComboResponse> CreateAsync(CreateComboRequest request)
-    {
-        _logger.LogInformation("Iniciando creación de combo con {Count} productos", request.Productos.Count);
-        
-        // Obtener todos los productos primero
-        var productos = await _productoRepository.GetAllAsync();
-        var productosDict = productos.ToDictionary(p => p.ProductoId);
-
-        foreach (var producto in request.Productos)
-        {
-            _logger.LogInformation("Verificando producto con ID {ProductoId}", producto.ProductoId);
-            
-            if (!productosDict.TryGetValue(producto.ProductoId, out var productoExistente))
-            {
-                _logger.LogWarning("Producto con ID {ProductoId} no encontrado", producto.ProductoId);
-                throw new InvalidOperationException($"El producto con ID {producto.ProductoId} no existe");
-            }
-
-            if (!productoExistente.EstaActivo)
-            {
-                _logger.LogWarning("Producto {ProductoId} - {Nombre} está inactivo", 
-                    productoExistente.ProductoId, productoExistente.Nombre);
-                throw new InvalidOperationException($"El producto {productoExistente.Nombre} no está activo");
-            }
+            _context = context;
+            _productoService = productoService;
         }
 
-        var combo = new Combo
+        public async Task<ComboResponse> CreateComboAsync(CreateComboRequest request)
         {
-            Nombre = request.Nombre,
-            Descripcion = request.Descripcion,
-            Precio = request.Precio,
-            EstaActivo = true,
-            UltimaActualizacion = DateTime.UtcNow,
-            Productos = request.Productos.Select(p => new ComboDetalle
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                ProductoId = p.ProductoId,
-                CantidadLibras = p.Cantidad
-            }).ToList()
-        };
-
-        var createdCombo = await _comboRepository.CreateAsync(combo);
-        _logger.LogInformation("Combo creado exitosamente: {ComboId}", createdCombo.ComboId);
-        return await MapToResponse(createdCombo);
-    }
-
-    public async Task<ComboResponse> UpdateAsync(int id, CreateComboRequest request)
-    {
-        var combo = await _comboRepository.GetByIdAsync(id);
-        if (combo == null)
-        {
-            throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
-        }
-
-        // Verificar productos igual que en CreateAsync
-        var productos = await _productoRepository.GetAllAsync();
-        var productosDict = productos.ToDictionary(p => p.ProductoId);
-
-        foreach (var producto in request.Productos)
-        {
-            if (!productosDict.TryGetValue(producto.ProductoId, out var productoExistente))
-            {
-                throw new InvalidOperationException($"El producto con ID {producto.ProductoId} no existe");
-            }
-
-            if (!productoExistente.EstaActivo)
-            {
-                throw new InvalidOperationException($"El producto {productoExistente.Nombre} no está activo");
-            }
-        }
-
-        combo.Nombre = request.Nombre;
-        combo.Descripcion = request.Descripcion;
-        combo.Precio = request.Precio;
-        combo.UltimaActualizacion = DateTime.UtcNow;
-        combo.Productos = request.Productos.Select(p => new ComboDetalle
-        {
-            ProductoId = p.ProductoId,
-            CantidadLibras = p.Cantidad
-        }).ToList();
-
-        var updatedCombo = await _comboRepository.UpdateAsync(combo);
-        return await MapToResponse(updatedCombo);
-    }
-
-    public async Task DeleteAsync(int id)
-    {
-        var exists = await _comboRepository.ExistsAsync(id);
-        if (!exists)
-        {
-            throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
-        }
-
-        await _comboRepository.DeleteAsync(id);
-    }
-
-    public async Task<ComboResponse> ToggleEstadoAsync(int id)
-    {
-        var combo = await _comboRepository.GetByIdAsync(id);
-        if (combo == null)
-        {
-            throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
-        }
-
-        combo.EstaActivo = !combo.EstaActivo;
-        combo.UltimaActualizacion = DateTime.UtcNow;
-
-        var updatedCombo = await _comboRepository.UpdateAsync(combo);
-        return await MapToResponse(updatedCombo);
-    }
-
-    private async Task<ComboResponse> MapToResponse(Combo combo)
-    {
-        var productos = await _productoRepository.GetAllAsync();
-        var productosDict = productos.ToDictionary(p => p.ProductoId);
-        var productosResponse = new List<ComboProductoResponse>();
-
-        foreach (var comboDetalle in combo.Productos)
-        {
-            if (productosDict.TryGetValue(comboDetalle.ProductoId, out var producto))
-            {
-                productosResponse.Add(new ComboProductoResponse
+                // Validar que todos los productos existan y tengan stock suficiente
+                foreach (var producto in request.Productos)
                 {
-                    ProductoId = producto.ProductoId,
-                    NombreProducto = producto.Nombre,
-                    Cantidad = (int)comboDetalle.CantidadLibras,
-                    PrecioUnitario = producto.PrecioPorLibra
-                });
-            }
+                    var existingProduct = await _context.Productos.FindAsync(producto.ProductoId);
+                    if (existingProduct == null)
+                        throw new KeyNotFoundException($"Producto con ID {producto.ProductoId} no encontrado");
+
+                    if (!existingProduct.EstaActivo)
+                        throw new InvalidOperationException($"El producto {existingProduct.Nombre} no está activo");
+
+                    if (!await _productoService.ValidateProductoStockAsync(producto.ProductoId, producto.CantidadLibras))
+                        throw new InvalidOperationException($"Stock insuficiente para el producto {existingProduct.Nombre}");
+                }
+
+                var combo = new Combo
+                {
+                    Nombre = request.Nombre,
+                    Descripcion = request.Descripcion,
+                    Precio = request.Precio,
+                    EstaActivo = true,
+                    UltimaActualizacion = DateTime.UtcNow,
+                    ComboDetalles = request.Productos.Select(p => new ComboDetalle
+                    {
+                        ProductoId = p.ProductoId,
+                        CantidadLibras = p.CantidadLibras
+                    }).ToList()
+                };
+
+                _context.Combos.Add(combo);
+                await _context.SaveChangesAsync();
+
+                return await GetComboByIdAsync(combo.ComboId);
+            });
         }
 
-        return new ComboResponse
+        public async Task<List<ComboResponse>> GetCombosAsync()
         {
-            ComboId = combo.ComboId,
-            Nombre = combo.Nombre,
-            Descripcion = combo.Descripcion,
-            Precio = combo.Precio,
-            EstaActivo = combo.EstaActivo,
-            Productos = productosResponse,
-            UltimaActualizacion = combo.UltimaActualizacion
-        };
+            var combos = await _context.Combos
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .OrderBy(c => c.Nombre)
+                .ToListAsync();
+
+            return combos.Select(MapComboToResponse).ToList();
+        }
+
+        public async Task<ComboResponse> GetComboByIdAsync(int id)
+        {
+            var combo = await _context.Combos
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .FirstOrDefaultAsync(c => c.ComboId == id);
+
+            if (combo == null)
+                throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
+
+            return MapComboToResponse(combo);
+        }
+
+        public async Task<List<ComboResponse>> GetActiveCombosAsync()
+        {
+            var combos = await _context.Combos
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .Where(c => c.EstaActivo)
+                .OrderBy(c => c.Nombre)
+                .ToListAsync();
+
+            return combos.Select(MapComboToResponse).ToList();
+        }
+
+        public async Task<bool> UpdateComboStatusAsync(int id, bool isActive)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                var combo = await _context.Combos.FindAsync(id);
+                if (combo == null)
+                    throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
+
+                combo.EstaActivo = isActive;
+                combo.UltimaActualizacion = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return true;
+            });
+        }
+
+        public async Task<bool> ValidateComboStockAsync(int comboId, decimal cantidad)
+        {
+            var comboDetalles = await _context.ComboDetalles
+                .Where(cd => cd.ComboId == comboId)
+                .ToListAsync();
+
+            foreach (var detalle in comboDetalles)
+            {
+                if (!await _productoService.ValidateProductoStockAsync(
+                    detalle.ProductoId,
+                    detalle.CantidadLibras * cantidad))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public async Task<decimal> CalculateComboTotalAsync(int comboId, decimal cantidad)
+        {
+            var combo = await _context.Combos
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ComboId == comboId);
+
+            if (combo == null)
+                throw new KeyNotFoundException($"Combo con ID {comboId} no encontrado");
+
+            if (!combo.EstaActivo)
+                throw new InvalidOperationException($"El combo no está activo");
+
+            return combo.Precio * cantidad;
+        }
+
+        private static ComboResponse MapComboToResponse(Combo combo)
+        {
+            return new ComboResponse
+            {
+                ComboId = combo.ComboId,
+                Nombre = combo.Nombre,
+                Descripcion = combo.Descripcion,
+                Precio = combo.Precio,
+                EstaActivo = combo.EstaActivo,
+                UltimaActualizacion = combo.UltimaActualizacion,
+                Productos = combo.ComboDetalles.Select(cd => new ComboDetalleResponse
+                {
+                    ComboDetalleId = cd.ComboDetalleId,
+                    Producto = MapProductoToResponse(cd.Producto),
+                    CantidadLibras = cd.CantidadLibras
+                }).ToList()
+            };
+        }
+
+        private static ProductoResponse MapProductoToResponse(Producto producto)
+        {
+            return new ProductoResponse
+            {
+                ProductoId = producto.ProductoId,
+                Nombre = producto.Nombre,
+                CantidadLibras = producto.CantidadLibras,
+                PrecioPorLibra = producto.PrecioPorLibra,
+                TipoEmpaque = producto.TipoEmpaque,
+                EstaActivo = producto.EstaActivo,
+                UltimaActualizacion = producto.UltimaActualizacion
+            };
+        }
     }
 } 

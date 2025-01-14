@@ -1,171 +1,301 @@
+using Microsoft.EntityFrameworkCore;
+using MiBackend.Data;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
-using MiBackend.Interfaces.Repositories;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
 
-namespace MiBackend.Services;
-
-public class VentaService : IVentaService
+namespace MiBackend.Services
 {
-    private readonly IGenericRepository<Venta> _ventaRepository;
-    private readonly IGenericRepository<Producto> _productoRepository;
-    private readonly IGenericRepository<Combo> _comboRepository;
-    private readonly ILogger<VentaService> _logger;
-
-    public VentaService(
-        IGenericRepository<Venta> ventaRepository,
-        IGenericRepository<Producto> productoRepository,
-        IGenericRepository<Combo> comboRepository,
-        ILogger<VentaService> logger)
+    public class VentaService : IVentaService
     {
-        _ventaRepository = ventaRepository;
-        _productoRepository = productoRepository;
-        _comboRepository = comboRepository;
-        _logger = logger;
-    }
+        private readonly ApplicationDbContext _context;
+        private readonly IProductoService _productoService;
+        private readonly IComboService _comboService;
 
-    public async Task<IEnumerable<VentaResponse>> GetAllAsync()
-    {
-        var ventas = await _ventaRepository.GetAllAsync();
-        return await Task.WhenAll(ventas.Select(MapToResponse));
-    }
-
-    public async Task<VentaResponse?> GetByIdAsync(int id)
-    {
-        var venta = await _ventaRepository.GetByIdAsync(id);
-        return venta != null ? await MapToResponse(venta) : null;
-    }
-
-    public async Task<VentaResponse> CreateAsync(CreateVentaRequest request)
-    {
-        var items = new List<VentaItem>();
-
-        foreach (var item in request.Items)
+        public VentaService(
+            ApplicationDbContext context,
+            IProductoService productoService,
+            IComboService comboService)
         {
-            decimal precioUnitario;
+            _context = context;
+            _productoService = productoService;
+            _comboService = comboService;
+        }
 
-            if (item.TipoItem.Equals("Producto", StringComparison.OrdinalIgnoreCase))
+        public async Task<VentaResponse> CreateVentaAsync(CreateVentaRequest request)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                var producto = await _productoRepository.GetByIdAsync(item.ItemId);
-                if (producto == null)
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    throw new InvalidOperationException($"El producto con ID {item.ItemId} no existe");
-                }
-                if (!producto.EstaActivo)
-                {
-                    throw new InvalidOperationException($"El producto {producto.Nombre} no está activo");
-                }
-                precioUnitario = producto.PrecioPorLibra;
-            }
-            else if (item.TipoItem.Equals("Combo", StringComparison.OrdinalIgnoreCase))
-            {
-                var combo = await _comboRepository.GetByIdAsync(item.ItemId);
-                if (combo == null)
-                {
-                    throw new InvalidOperationException($"El combo con ID {item.ItemId} no existe");
-                }
-                if (!combo.EstaActivo)
-                {
-                    throw new InvalidOperationException($"El combo {combo.Nombre} no está activo");
-                }
-                precioUnitario = combo.Precio;
-            }
-            else
-            {
-                throw new InvalidOperationException($"Tipo de ítem no válido: {item.TipoItem}");
-            }
+                    // Crear la venta
+                    var venta = new Venta
+                    {
+                        Cliente = request.Cliente,
+                        Observaciones = request.Observaciones,
+                        TipoVenta = request.TipoVenta,
+                        FechaVenta = DateTime.UtcNow,
+                        MontoTotal = 0
+                    };
 
-            items.Add(new VentaItem
-            {
-                TipoItem = item.TipoItem,
-                ItemId = item.ItemId,
-                Cantidad = item.Cantidad,
-                PrecioUnitario = precioUnitario
+                    _context.Ventas.Add(venta);
+                    await _context.SaveChangesAsync();
+
+                    // Procesar los detalles
+                    decimal montoTotal = 0;
+                    var detalles = new List<VentaDetalle>();
+
+                    foreach (var detalle in request.Detalles)
+                    {
+                        var ventaDetalle = new VentaDetalle
+                        {
+                            VentaId = venta.VentaId,
+                            TipoItem = detalle.TipoItem,
+                            ProductoId = detalle.ProductoId,
+                            ComboId = detalle.ComboId,
+                            CantidadLibras = detalle.CantidadLibras
+                        };
+
+                        if (detalle.TipoItem == "PRODUCTO")
+                        {
+                            if (!await _productoService.ValidateProductoStockAsync(detalle.ProductoId.Value, detalle.CantidadLibras))
+                                throw new InvalidOperationException($"Stock insuficiente para el producto {detalle.ProductoId}");
+
+                            var producto = await _context.Productos.FindAsync(detalle.ProductoId.Value);
+                            ventaDetalle.PrecioUnitario = producto.PrecioPorLibra;
+                            ventaDetalle.Subtotal = detalle.CantidadLibras * producto.PrecioPorLibra;
+
+                            await _productoService.UpdateProductoStockAsync(detalle.ProductoId.Value, detalle.CantidadLibras, false);
+                        }
+                        else if (detalle.TipoItem == "COMBO")
+                        {
+                            if (!await _comboService.ValidateComboStockAsync(detalle.ComboId.Value, detalle.CantidadLibras))
+                                throw new InvalidOperationException($"Stock insuficiente para el combo {detalle.ComboId}");
+
+                            var combo = await _context.Combos.FindAsync(detalle.ComboId.Value);
+                            ventaDetalle.PrecioUnitario = combo.Precio;
+                            ventaDetalle.Subtotal = combo.Precio * detalle.CantidadLibras;
+
+                            var comboDetalles = await _context.ComboDetalles
+                                .Where(cd => cd.ComboId == detalle.ComboId.Value)
+                                .ToListAsync();
+
+                            foreach (var comboDetalle in comboDetalles)
+                            {
+                                await _productoService.UpdateProductoStockAsync(
+                                    comboDetalle.ProductoId,
+                                    comboDetalle.CantidadLibras * detalle.CantidadLibras,
+                                    false);
+                            }
+                        }
+
+                        detalles.Add(ventaDetalle);
+                        montoTotal += ventaDetalle.Subtotal;
+                    }
+
+                    // Guardar los detalles
+                    await _context.VentaDetalles.AddRangeAsync(detalles);
+                    
+                    // Actualizar el monto total
+                    venta.MontoTotal = montoTotal;
+                    
+                    // Guardar todos los cambios
+                    await _context.SaveChangesAsync();
+
+                    // Confirmar la transacción
+                    await transaction.CommitAsync();
+
+                    // Construir la respuesta directamente con los datos que ya tenemos
+                    return new VentaResponse
+                    {
+                        VentaId = venta.VentaId,
+                        Cliente = venta.Cliente,
+                        Observaciones = venta.Observaciones,
+                        FechaVenta = venta.FechaVenta,
+                        MontoTotal = venta.MontoTotal,
+                        TipoVenta = venta.TipoVenta,
+                        Detalles = detalles.Select(d => new VentaDetalleResponse
+                        {
+                            DetalleVentaId = d.DetalleVentaId,
+                            TipoItem = d.TipoItem,
+                            CantidadLibras = d.CantidadLibras,
+                            PrecioUnitario = d.PrecioUnitario,
+                            Subtotal = d.Subtotal
+                        }).ToList()
+                    };
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             });
         }
 
-        var venta = new Venta
+        public async Task<List<VentaResponse>> GetVentasAsync()
         {
-            Cliente = request.Cliente,
-            Observaciones = request.Observaciones,
-            FechaVenta = DateTime.UtcNow,
-            Items = items
-        };
+            var ventas = await _context.Ventas
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Producto)
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Combo)
+                        .ThenInclude(c => c.ComboDetalles)
+                            .ThenInclude(cd => cd.Producto)
+                .OrderByDescending(v => v.FechaVenta)
+                .ToListAsync();
 
-        var createdVenta = await _ventaRepository.CreateAsync(venta);
-        _logger.LogInformation("Venta creada exitosamente: {VentaId}", createdVenta.VentaId);
-        return await MapToResponse(createdVenta);
-    }
-
-    public async Task<object> GenerarReporteAsync(DateTime? fechaInicio, DateTime? fechaFin, string? cliente)
-    {
-        var ventas = await _ventaRepository.GetAllAsync();
-        var query = ventas.AsQueryable();
-
-        if (fechaInicio.HasValue)
-        {
-            query = query.Where(v => v.FechaVenta >= fechaInicio.Value);
+            return ventas.Select(MapVentaToResponse).ToList();
         }
 
-        if (fechaFin.HasValue)
+        public async Task<VentaResponse> GetVentaByIdAsync(int id)
         {
-            query = query.Where(v => v.FechaVenta <= fechaFin.Value);
-        }
+            var venta = await _context.Ventas
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Producto)
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Combo)
+                .AsSplitQuery()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.VentaId == id);
 
-        if (!string.IsNullOrWhiteSpace(cliente))
-        {
-            query = query.Where(v => v.Cliente.Contains(cliente, StringComparison.OrdinalIgnoreCase));
-        }
+            if (venta == null)
+                throw new KeyNotFoundException($"Venta con ID {id} no encontrada");
 
-        var ventasFiltradas = await Task.WhenAll(query.Select(MapToResponse));
-
-        return new
-        {
-            FechaInicio = fechaInicio,
-            FechaFin = fechaFin,
-            Cliente = cliente,
-            TotalVentas = ventasFiltradas.Count(),
-            MontoTotal = ventasFiltradas.Sum(v => v.Total),
-            Ventas = ventasFiltradas
-        };
-    }
-
-    private async Task<VentaResponse> MapToResponse(Venta venta)
-    {
-        var itemsResponse = new List<VentaItemResponse>();
-
-        foreach (var item in venta.Items)
-        {
-            string nombre;
-            if (item.TipoItem.Equals("Producto", StringComparison.OrdinalIgnoreCase))
+            var detallesConCombo = venta.VentaDetalles.Where(vd => vd.ComboId != null).ToList();
+            if (detallesConCombo.Any())
             {
-                var producto = await _productoRepository.GetByIdAsync(item.ItemId);
-                nombre = producto?.Nombre ?? "Producto no encontrado";
-            }
-            else
-            {
-                var combo = await _comboRepository.GetByIdAsync(item.ItemId);
-                nombre = combo?.Nombre ?? "Combo no encontrado";
+                var comboIds = detallesConCombo.Select(vd => vd.ComboId.Value).Distinct().ToList();
+                var combosConDetalles = await _context.Combos
+                    .Include(c => c.ComboDetalles)
+                        .ThenInclude(cd => cd.Producto)
+                    .Where(c => comboIds.Contains(c.ComboId))
+                    .AsSplitQuery()
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                foreach (var detalle in detallesConCombo)
+                {
+                    detalle.Combo = combosConDetalles.FirstOrDefault(c => c.ComboId == detalle.ComboId);
+                }
             }
 
-            itemsResponse.Add(new VentaItemResponse
-            {
-                TipoItem = item.TipoItem,
-                ItemId = item.ItemId,
-                Nombre = nombre,
-                Cantidad = item.Cantidad,
-                PrecioUnitario = item.PrecioUnitario
-            });
+            return MapVentaToResponse(venta);
         }
 
-        return new VentaResponse
+        public async Task<List<VentaResponse>> GetVentasByDateRangeAsync(DateTime startDate, DateTime endDate)
         {
-            VentaId = venta.VentaId,
-            Cliente = venta.Cliente,
-            Items = itemsResponse,
-            Observaciones = venta.Observaciones,
-            FechaVenta = venta.FechaVenta
-        };
+            startDate = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
+            endDate = DateTime.SpecifyKind(endDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
+            var ventas = await _context.Ventas
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Producto)
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Combo)
+                .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
+                .OrderByDescending(v => v.FechaVenta)
+                .AsSplitQuery()
+                .AsNoTracking()
+                .ToListAsync();
+
+            var ventasConCombos = ventas.Where(v => v.VentaDetalles.Any(vd => vd.ComboId != null)).ToList();
+            if (ventasConCombos.Any())
+            {
+                var comboIds = ventasConCombos
+                    .SelectMany(v => v.VentaDetalles)
+                    .Where(vd => vd.ComboId != null)
+                    .Select(vd => vd.ComboId.Value)
+                    .Distinct()
+                    .ToList();
+
+                var combosConDetalles = await _context.Combos
+                    .Include(c => c.ComboDetalles)
+                        .ThenInclude(cd => cd.Producto)
+                    .Where(c => comboIds.Contains(c.ComboId))
+                    .AsSplitQuery()
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                foreach (var venta in ventasConCombos)
+                {
+                    foreach (var detalle in venta.VentaDetalles.Where(vd => vd.ComboId != null))
+                    {
+                        detalle.Combo = combosConDetalles.FirstOrDefault(c => c.ComboId == detalle.ComboId);
+                    }
+                }
+            }
+
+            return ventas.Select(MapVentaToResponse).ToList();
+        }
+
+        public async Task<decimal> GetTotalVentasByDateAsync(DateTime date)
+        {
+            var startDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            var endDate = startDate.AddDays(1).AddTicks(-1);
+
+            return await _context.Ventas
+                .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
+                .AsNoTracking()
+                .SumAsync(v => v.MontoTotal);
+        }
+
+        private static VentaResponse MapVentaToResponse(Venta venta)
+        {
+            return new VentaResponse
+            {
+                VentaId = venta.VentaId,
+                Cliente = venta.Cliente,
+                Observaciones = venta.Observaciones,
+                FechaVenta = venta.FechaVenta,
+                MontoTotal = venta.MontoTotal,
+                TipoVenta = venta.TipoVenta,
+                Detalles = venta.VentaDetalles.Select(d => new VentaDetalleResponse
+                {
+                    DetalleVentaId = d.DetalleVentaId,
+                    TipoItem = d.TipoItem,
+                    Producto = d.Producto != null ? MapProductoToResponse(d.Producto) : null,
+                    Combo = d.Combo != null ? MapComboToResponse(d.Combo) : null,
+                    CantidadLibras = d.CantidadLibras,
+                    PrecioUnitario = d.PrecioUnitario,
+                    Subtotal = d.Subtotal
+                }).ToList()
+            };
+        }
+
+        private static ProductoResponse MapProductoToResponse(Producto producto)
+        {
+            return new ProductoResponse
+            {
+                ProductoId = producto.ProductoId,
+                Nombre = producto.Nombre,
+                CantidadLibras = producto.CantidadLibras,
+                PrecioPorLibra = producto.PrecioPorLibra,
+                TipoEmpaque = producto.TipoEmpaque,
+                EstaActivo = producto.EstaActivo,
+                UltimaActualizacion = producto.UltimaActualizacion
+            };
+        }
+
+        private static ComboResponse MapComboToResponse(Combo combo)
+        {
+            return new ComboResponse
+            {
+                ComboId = combo.ComboId,
+                Nombre = combo.Nombre,
+                Descripcion = combo.Descripcion,
+                Precio = combo.Precio,
+                EstaActivo = combo.EstaActivo,
+                UltimaActualizacion = combo.UltimaActualizacion,
+                Productos = combo.ComboDetalles.Select(cd => new ComboDetalleResponse
+                {
+                    ComboDetalleId = cd.ComboDetalleId,
+                    Producto = MapProductoToResponse(cd.Producto),
+                    CantidadLibras = cd.CantidadLibras
+                }).ToList()
+            };
+        }
     }
 } 

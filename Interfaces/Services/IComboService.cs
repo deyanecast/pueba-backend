@@ -1,14 +1,16 @@
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
 
-namespace MiBackend.Interfaces.Services;
-
-public interface IComboService
+namespace MiBackend.Interfaces.Services
 {
-    Task<IEnumerable<ComboResponse>> GetAllAsync();
-    Task<ComboResponse?> GetByIdAsync(int id);
-    Task<ComboResponse> CreateAsync(CreateComboRequest request);
-    Task<ComboResponse> UpdateAsync(int id, CreateComboRequest request);
-    Task DeleteAsync(int id);
-    Task<ComboResponse> ToggleEstadoAsync(int id);
+    public interface IComboService
+    {
+        Task<ComboResponse> CreateComboAsync(CreateComboRequest request);
+        Task<List<ComboResponse>> GetCombosAsync();
+        Task<ComboResponse> GetComboByIdAsync(int id);
+        Task<List<ComboResponse>> GetActiveCombosAsync();
+        Task<bool> UpdateComboStatusAsync(int id, bool isActive);
+        Task<bool> ValidateComboStockAsync(int comboId, decimal cantidad);
+        Task<decimal> CalculateComboTotalAsync(int comboId, decimal cantidad);
+    }
 } 

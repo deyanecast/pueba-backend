@@ -9,23 +9,27 @@ namespace MiBackend.Models
         [Key]
         [Column("producto_id")]
         public int ProductoId { get; set; }
-        
-        [Required]
+
         [Column("nombre")]
-        public required string Nombre { get; set; }
-        
-        [Required]
+        public string Nombre { get; set; }
+
         [Column("cantidad_libras")]
         public decimal CantidadLibras { get; set; }
-        
-        [Required]
+
         [Column("precio_por_libra")]
         public decimal PrecioPorLibra { get; set; }
-        
+
         [Column("tipo_empaque")]
-        public string? TipoEmpaque { get; set; }
-        
+        public string TipoEmpaque { get; set; }
+
         [Column("esta_activo")]
-        public bool EstaActivo { get; set; } = true;
+        public bool EstaActivo { get; set; }
+
+        [Column("ultima_actualizacion")]
+        public DateTime UltimaActualizacion { get; set; }
+
+        // Navigation properties
+        public virtual ICollection<VentaDetalle> VentaDetalles { get; set; }
+        public virtual ICollection<ComboDetalle> ComboDetalles { get; set; }
     }
 } 
