@@ -16,14 +16,11 @@ namespace MiBackend.Models
         [Column("producto_id")]
         public int ProductoId { get; set; }
 
-        [Required]
         [Column("cantidad_libras")]
         public decimal CantidadLibras { get; set; }
 
-        [ForeignKey("ComboId")]
-        public virtual Combo Combo { get; set; } = null!;
-
-        [ForeignKey("ProductoId")]
-        public virtual Producto Producto { get; set; } = null!;
+        // Navigation properties
+        public virtual Combo Combo { get; set; }
+        public virtual Producto Producto { get; set; }
     }
 } 

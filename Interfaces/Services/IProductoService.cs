@@ -1,16 +1,17 @@
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
-using MiBackend.Models;
 
-namespace MiBackend.Interfaces.Services;
-
-public interface IProductoService
+namespace MiBackend.Interfaces.Services
 {
-    Task<IEnumerable<ProductoResponse>> GetAllAsync();
-    Task<ProductoResponse?> GetByIdAsync(int id);
-    Task<ProductoResponse> CreateAsync(CreateProductoRequest request);
-    Task<ProductoResponse> UpdateAsync(int id, UpdateProductoRequest request);
-    Task DeleteAsync(int id);
-    Task<ProductoResponse> ToggleEstadoAsync(int id);
-    Task<IEnumerable<ProductoResponse>> BuscarAsync(string? nombre, decimal? precioMin, decimal? precioMax, bool? activo);
+    public interface IProductoService
+    {
+        Task<ProductoResponse> CreateProductoAsync(CreateProductoRequest request);
+        Task<List<ProductoResponse>> GetProductosAsync();
+        Task<ProductoResponse> GetProductoByIdAsync(int id);
+        Task<List<ProductoResponse>> GetActiveProductosAsync();
+        Task<ProductoResponse> UpdateProductoAsync(int id, UpdateProductoRequest request);
+        Task<bool> UpdateProductoStatusAsync(int id, bool isActive);
+        Task<bool> ValidateProductoStockAsync(int productoId, decimal cantidadLibras);
+        Task<bool> UpdateProductoStockAsync(int productoId, decimal cantidadLibras, bool isAddition);
+    }
 } 

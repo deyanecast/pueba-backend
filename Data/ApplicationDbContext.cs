@@ -14,32 +14,48 @@ namespace MiBackend.Data
         public DbSet<Combo> Combos { get; set; }
         public DbSet<ComboDetalle> ComboDetalles { get; set; }
         public DbSet<Venta> Ventas { get; set; }
-        public DbSet<VentaItem> VentaItems { get; set; }
+        public DbSet<VentaDetalle> VentaDetalles { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            
-            // Configurar las propiedades decimales
-            modelBuilder.Entity<Producto>()
-                .Property(p => p.PrecioPorLibra)
-                .HasColumnType("decimal(18,2)");
 
-            modelBuilder.Entity<Producto>()
-                .Property(p => p.CantidadLibras)
-                .HasColumnType("decimal(18,2)");
+            // Configuración de relaciones y restricciones
+            modelBuilder.Entity<VentaDetalle>()
+                .HasOne(vd => vd.Venta)
+                .WithMany(v => v.VentaDetalles)
+                .HasForeignKey(vd => vd.VentaId)
+                .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<Combo>()
-                .Property(c => c.Precio)
-                .HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<VentaDetalle>()
+                .HasOne(vd => vd.Producto)
+                .WithMany(p => p.VentaDetalles)
+                .HasForeignKey(vd => vd.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<VentaItem>()
-                .Property(v => v.PrecioUnitario)
-                .HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<VentaDetalle>()
+                .HasOne(vd => vd.Combo)
+                .WithMany(c => c.VentaDetalles)
+                .HasForeignKey(vd => vd.ComboId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Venta>()
-                .Property(v => v.MontoTotal)
-                .HasColumnType("decimal(18,2)");
+            modelBuilder.Entity<ComboDetalle>()
+                .HasOne(cd => cd.Combo)
+                .WithMany(c => c.ComboDetalles)
+                .HasForeignKey(cd => cd.ComboId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ComboDetalle>()
+                .HasOne(cd => cd.Producto)
+                .WithMany(p => p.ComboDetalles)
+                .HasForeignKey(cd => cd.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Configuración de checks y validaciones
+            modelBuilder.Entity<VentaDetalle>()
+                .HasCheckConstraint("CK_VentaDetalle_TipoItem", 
+                    "(tipo_item = 'PRODUCTO' AND producto_id IS NOT NULL AND combo_id IS NULL) OR " +
+                    "(tipo_item = 'COMBO' AND combo_id IS NOT NULL AND producto_id IS NULL)");
         }
     }
 } 

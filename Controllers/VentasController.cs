@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MiBackend.DTOs.Requests;
+using MiBackend.DTOs.Responses;
 using MiBackend.Interfaces.Services;
 
 namespace MiBackend.Controllers;
@@ -9,88 +10,97 @@ namespace MiBackend.Controllers;
 public class VentasController : ControllerBase
 {
     private readonly IVentaService _ventaService;
-    private readonly ILogger<VentasController> _logger;
 
-    public VentasController(IVentaService ventaService, ILogger<VentasController> logger)
+    public VentasController(IVentaService ventaService)
     {
         _ventaService = ventaService;
-        _logger = logger;
+    }
+
+    [HttpPost]
+    [Consumes("application/json")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<VentaResponse>> CreateVenta([FromBody] CreateVentaRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var response = await _ventaService.CreateVentaAsync(request);
+            return CreatedAtAction(nameof(GetVentaById), new { id = response.VentaId }, response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al crear la venta", error = ex.Message });
+        }
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<ActionResult<List<VentaResponse>>> GetVentas()
     {
         try
         {
-            var ventas = await _ventaService.GetAllAsync();
+            var ventas = await _ventaService.GetVentasAsync();
             return Ok(ventas);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener las ventas");
-            return StatusCode(500, "Error interno del servidor al obtener las ventas");
+            return StatusCode(500, new { message = "Error al obtener las ventas", error = ex.Message });
         }
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetById(int id)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<VentaResponse>> GetVentaById(int id)
     {
         try
         {
-            var venta = await _ventaService.GetByIdAsync(id);
-            if (venta == null)
-            {
-                return NotFound($"No se encontró la venta con ID {id}");
-            }
+            var venta = await _ventaService.GetVentaByIdAsync(id);
             return Ok(venta);
         }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = $"Venta con ID {id} no encontrada" });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener la venta {VentaId}", id);
-            return StatusCode(500, "Error interno del servidor al obtener la venta");
+            return StatusCode(500, new { message = "Error al obtener la venta", error = ex.Message });
         }
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateVentaRequest request)
+    [HttpGet("range")]
+    public async Task<ActionResult<List<VentaResponse>>> GetVentasByDateRange(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate)
     {
         try
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            var venta = await _ventaService.CreateAsync(request);
-            return CreatedAtAction(nameof(GetById), new { id = venta.VentaId }, venta);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Error de validación al crear la venta");
-            return BadRequest(ex.Message);
+            var ventas = await _ventaService.GetVentasByDateRangeAsync(startDate, endDate);
+            return Ok(ventas);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al crear la venta");
-            return StatusCode(500, "Error interno del servidor al crear la venta");
+            return StatusCode(500, new { message = "Error al obtener las ventas por rango de fecha", error = ex.Message });
         }
     }
 
-    [HttpGet("reporte")]
-    public async Task<IActionResult> GenerarReporte(
-        [FromQuery] DateTime? fechaInicio,
-        [FromQuery] DateTime? fechaFin,
-        [FromQuery] string? cliente)
+    [HttpGet("total/date")]
+    public async Task<ActionResult<decimal>> GetTotalVentasByDate([FromQuery] DateTime date)
     {
         try
         {
-            var reporte = await _ventaService.GenerarReporteAsync(fechaInicio, fechaFin, cliente);
-            return Ok(reporte);
+            var total = await _ventaService.GetTotalVentasByDateAsync(date);
+            return Ok(new { date = date.Date, total });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al generar el reporte de ventas");
-            return StatusCode(500, "Error interno del servidor al generar el reporte de ventas");
+            return StatusCode(500, new { message = "Error al obtener el total de ventas", error = ex.Message });
         }
     }
 } 
