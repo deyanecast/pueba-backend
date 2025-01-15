@@ -146,8 +146,12 @@ namespace MiBackend.Services
             return ventas;
         }
 
-        private static ProductoResponse MapProductoToResponse(Producto producto) =>
-            new()
+        private static ProductoResponse MapProductoToResponse(Producto? producto)
+        {
+            if (producto == null)
+                throw new ArgumentNullException(nameof(producto));
+
+            return new()
             {
                 ProductoId = producto.ProductoId,
                 Nombre = producto.Nombre,
@@ -157,6 +161,7 @@ namespace MiBackend.Services
                 EstaActivo = producto.EstaActivo,
                 UltimaActualizacion = producto.UltimaActualizacion
             };
+        }
 
         private static ComboResponse MapComboToResponse(Combo combo) =>
             new()
@@ -285,7 +290,7 @@ namespace MiBackend.Services
 
                 var cacheOptions = new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                    .SetSize(1); // Establecemos un tamaño fijo pequeño ya que solo es un decimal
+                    .SetSize(1);
 
                 _cache.Set(cacheKey, total, cacheOptions);
 
@@ -295,6 +300,55 @@ namespace MiBackend.Services
             {
                 _logger.LogError(ex, "Error al obtener el total de ventas para la fecha {Date}", date);
                 throw new InvalidOperationException("Error al obtener el total de ventas", ex);
+            }
+        }
+
+        public async Task<DashboardResponse> GetDashboardDataAsync()
+        {
+            string cacheKey = "DashboardData";
+            
+            try 
+            {
+                if (_cache.TryGetValue(cacheKey, out DashboardResponse? cachedData) && cachedData != null)
+                    return cachedData;
+
+                var today = DateTime.UtcNow.Date;
+                var ventasHoy = await GetTotalVentasByDateAsync(today);
+
+                var productosStockBajo = await _context.Productos
+                    .Where(p => p.EstaActivo && p.CantidadLibras < 10)
+                    .Select(p => new ProductoStockBajoResponse 
+                    {
+                        ProductoId = p.ProductoId,
+                        Nombre = p.Nombre,
+                        CantidadLibras = p.CantidadLibras
+                    })
+                    .ToListAsync();
+
+                var productosActivos = await _context.Productos
+                    .Where(p => p.EstaActivo)
+                    .CountAsync();
+
+                var dashboardData = new DashboardResponse
+                {
+                    VentasDelDia = ventasHoy,
+                    FechaActualizacion = today,
+                    ProductosStockBajo = productosStockBajo,
+                    TotalProductosActivos = productosActivos
+                };
+
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(50);
+
+                _cache.Set(cacheKey, dashboardData, cacheOptions);
+
+                return dashboardData;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener datos del dashboard");
+                throw new InvalidOperationException("Error al obtener datos del dashboard", ex);
             }
         }
     }

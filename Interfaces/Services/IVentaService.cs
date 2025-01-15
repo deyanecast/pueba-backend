@@ -10,5 +10,6 @@ namespace MiBackend.Interfaces.Services
         Task<VentaResponse> GetVentaByIdAsync(int id);
         Task<List<VentaResponse>> GetVentasByDateRangeAsync(DateTime startDate, DateTime endDate);
         Task<decimal> GetTotalVentasByDateAsync(DateTime date);
+        Task<DashboardResponse> GetDashboardDataAsync();
     }
 } 

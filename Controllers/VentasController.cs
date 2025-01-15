@@ -103,4 +103,18 @@ public class VentasController : ControllerBase
             return StatusCode(500, new { message = "Error al obtener el total de ventas", error = ex.Message });
         }
     }
+
+    [HttpGet("dashboard")]
+    public async Task<ActionResult<DashboardResponse>> GetDashboardData()
+    {
+        try
+        {
+            var dashboardData = await _ventaService.GetDashboardDataAsync();
+            return Ok(dashboardData);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al obtener datos del dashboard", error = ex.Message });
+        }
+    }
 } 

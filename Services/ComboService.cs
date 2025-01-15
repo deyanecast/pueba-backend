@@ -98,21 +98,23 @@ namespace MiBackend.Services
                     Precio = c.Precio,
                     EstaActivo = c.EstaActivo,
                     UltimaActualizacion = c.UltimaActualizacion,
-                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
-                    {
-                        ComboDetalleId = cd.ComboDetalleId,
-                        Producto = new ProductoResponse
+                    Productos = c.ComboDetalles
+                        .Where(cd => cd.Producto != null)
+                        .Select(cd => new ComboDetalleResponse
                         {
-                            ProductoId = cd.Producto.ProductoId,
-                            Nombre = cd.Producto.Nombre,
-                            CantidadLibras = cd.Producto.CantidadLibras,
-                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
-                            TipoEmpaque = cd.Producto.TipoEmpaque,
-                            EstaActivo = cd.Producto.EstaActivo,
-                            UltimaActualizacion = cd.Producto.UltimaActualizacion
-                        },
-                        CantidadLibras = cd.CantidadLibras
-                    }).ToList()
+                            ComboDetalleId = cd.ComboDetalleId,
+                            Producto = new ProductoResponse
+                            {
+                                ProductoId = cd.Producto.ProductoId,
+                                Nombre = cd.Producto.Nombre,
+                                CantidadLibras = cd.Producto.CantidadLibras,
+                                PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                                TipoEmpaque = cd.Producto.TipoEmpaque,
+                                EstaActivo = cd.Producto.EstaActivo,
+                                UltimaActualizacion = cd.Producto.UltimaActualizacion
+                            },
+                            CantidadLibras = cd.CantidadLibras
+                        }).ToList()
                 })
                 .OrderBy(c => c.Nombre)
                 .AsSplitQuery()
@@ -133,21 +135,23 @@ namespace MiBackend.Services
                     Precio = c.Precio,
                     EstaActivo = c.EstaActivo,
                     UltimaActualizacion = c.UltimaActualizacion,
-                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
-                    {
-                        ComboDetalleId = cd.ComboDetalleId,
-                        Producto = new ProductoResponse
+                    Productos = c.ComboDetalles
+                        .Where(cd => cd.Producto != null)
+                        .Select(cd => new ComboDetalleResponse
                         {
-                            ProductoId = cd.Producto.ProductoId,
-                            Nombre = cd.Producto.Nombre,
-                            CantidadLibras = cd.Producto.CantidadLibras,
-                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
-                            TipoEmpaque = cd.Producto.TipoEmpaque,
-                            EstaActivo = cd.Producto.EstaActivo,
-                            UltimaActualizacion = cd.Producto.UltimaActualizacion
-                        },
-                        CantidadLibras = cd.CantidadLibras
-                    }).ToList()
+                            ComboDetalleId = cd.ComboDetalleId,
+                            Producto = new ProductoResponse
+                            {
+                                ProductoId = cd.Producto.ProductoId,
+                                Nombre = cd.Producto.Nombre,
+                                CantidadLibras = cd.Producto.CantidadLibras,
+                                PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                                TipoEmpaque = cd.Producto.TipoEmpaque,
+                                EstaActivo = cd.Producto.EstaActivo,
+                                UltimaActualizacion = cd.Producto.UltimaActualizacion
+                            },
+                            CantidadLibras = cd.CantidadLibras
+                        }).ToList()
                 })
                 .AsSplitQuery()
                 .AsNoTracking()
@@ -171,21 +175,23 @@ namespace MiBackend.Services
                     Precio = c.Precio,
                     EstaActivo = c.EstaActivo,
                     UltimaActualizacion = c.UltimaActualizacion,
-                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
-                    {
-                        ComboDetalleId = cd.ComboDetalleId,
-                        Producto = new ProductoResponse
+                    Productos = c.ComboDetalles
+                        .Where(cd => cd.Producto != null)
+                        .Select(cd => new ComboDetalleResponse
                         {
-                            ProductoId = cd.Producto.ProductoId,
-                            Nombre = cd.Producto.Nombre,
-                            CantidadLibras = cd.Producto.CantidadLibras,
-                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
-                            TipoEmpaque = cd.Producto.TipoEmpaque,
-                            EstaActivo = cd.Producto.EstaActivo,
-                            UltimaActualizacion = cd.Producto.UltimaActualizacion
-                        },
-                        CantidadLibras = cd.CantidadLibras
-                    }).ToList()
+                            ComboDetalleId = cd.ComboDetalleId,
+                            Producto = new ProductoResponse
+                            {
+                                ProductoId = cd.Producto.ProductoId,
+                                Nombre = cd.Producto.Nombre,
+                                CantidadLibras = cd.Producto.CantidadLibras,
+                                PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                                TipoEmpaque = cd.Producto.TipoEmpaque,
+                                EstaActivo = cd.Producto.EstaActivo,
+                                UltimaActualizacion = cd.Producto.UltimaActualizacion
+                            },
+                            CantidadLibras = cd.CantidadLibras
+                        }).ToList()
                 })
                 .OrderBy(c => c.Nombre)
                 .AsSplitQuery()
