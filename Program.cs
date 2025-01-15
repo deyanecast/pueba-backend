@@ -4,6 +4,7 @@ using MiBackend.Interfaces.Repositories;
 using MiBackend.Interfaces.Services;
 using MiBackend.Repositories;
 using MiBackend.Services;
+using MiBackend.Strategies;
 using DotNetEnv;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +50,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Add Memory Cache
+builder.Services.AddMemoryCache();
+
 // Configure CORS
 builder.Services.AddCors(options =>
 {
@@ -87,6 +91,12 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IProductoService, ProductoService>();
 builder.Services.AddScoped<IComboService, ComboService>();
 builder.Services.AddScoped<IVentaService, VentaService>();
+
+// Register strategies
+builder.Services.AddScoped<ProductoVentaStrategy>();
+builder.Services.AddScoped<ComboVentaStrategy>();
+builder.Services.AddScoped<IVentaItemStrategy>(sp => sp.GetRequiredService<ProductoVentaStrategy>());
+builder.Services.AddScoped<IVentaItemStrategy>(sp => sp.GetRequiredService<ComboVentaStrategy>());
 
 // Configurar logging
 builder.Services.AddLogging(logging =>

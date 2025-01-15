@@ -53,9 +53,25 @@ namespace MiBackend.Data
 
             // Configuración de checks y validaciones
             modelBuilder.Entity<VentaDetalle>()
-                .HasCheckConstraint("CK_VentaDetalle_TipoItem", 
+                .ToTable(tb => tb.HasCheckConstraint(
+                    "CK_VentaDetalle_TipoItem",
                     "(tipo_item = 'PRODUCTO' AND producto_id IS NOT NULL AND combo_id IS NULL) OR " +
-                    "(tipo_item = 'COMBO' AND combo_id IS NOT NULL AND producto_id IS NULL)");
+                    "(tipo_item = 'COMBO' AND combo_id IS NOT NULL AND producto_id IS NULL)"));
+
+            modelBuilder.Entity<Producto>()
+                .ToTable(tb => tb.HasCheckConstraint(
+                    "CK_Producto_CantidadLibras",
+                    "\"CantidadLibras\" >= 0"));
+
+            modelBuilder.Entity<Producto>()
+                .ToTable(tb => tb.HasCheckConstraint(
+                    "CK_Producto_PrecioPorLibra",
+                    "\"PrecioPorLibra\" >= 0"));
+
+            modelBuilder.Entity<Combo>()
+                .ToTable(tb => tb.HasCheckConstraint(
+                    "CK_Combo_Precio",
+                    "\"Precio\" >= 0"));
         }
     }
 } 
