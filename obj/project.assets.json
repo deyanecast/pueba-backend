@@ -8264,11 +8264,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/deyane/Documents/GenesisPrueba/MiBackend/MiBackend.csproj",
+      "projectUniqueName": "/Users/deyane/Documents/GenesisPrueba/pueba-backend/MiBackend.csproj",
       "projectName": "MiBackend",
-      "projectPath": "/Users/deyane/Documents/GenesisPrueba/MiBackend/MiBackend.csproj",
+      "projectPath": "/Users/deyane/Documents/GenesisPrueba/pueba-backend/MiBackend.csproj",
       "packagesPath": "/Users/deyane/.nuget/packages/",
-      "outputPath": "/Users/deyane/Documents/GenesisPrueba/MiBackend/obj/",
+      "outputPath": "/Users/deyane/Documents/GenesisPrueba/pueba-backend/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/Users/deyane/.nuget/NuGet/NuGet.Config"
@@ -8277,6 +8277,7 @@
         "net9.0"
       ],
       "sources": {
+        "/opt/homebrew/Cellar/dotnet/9.0.101/libexec/library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -8351,7 +8352,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.101/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/opt/homebrew/Cellar/dotnet/9.0.101/libexec/sdk/9.0.101/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

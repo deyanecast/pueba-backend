@@ -20,7 +20,7 @@ namespace MiBackend.Models
         public decimal CantidadLibras { get; set; }
 
         // Navigation properties
-        public virtual Combo Combo { get; set; }
-        public virtual Producto Producto { get; set; }
+        public required Combo Combo { get; set; }
+        public required Producto Producto { get; set; }
     }
 } 

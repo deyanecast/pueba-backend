@@ -29,11 +29,11 @@ namespace MiBackend.Models
         public decimal Subtotal { get; set; }
 
         [Column("tipo_item")]
-        public string TipoItem { get; set; }
+        public required string TipoItem { get; set; }
 
         // Navigation properties
-        public virtual Venta Venta { get; set; }
-        public virtual Producto Producto { get; set; }
-        public virtual Combo Combo { get; set; }
+        public required Venta Venta { get; set; }
+        public Producto? Producto { get; set; }
+        public Combo? Combo { get; set; }
     }
 } 

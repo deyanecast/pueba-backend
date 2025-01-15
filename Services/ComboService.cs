@@ -45,15 +45,22 @@ namespace MiBackend.Services
                     Descripcion = request.Descripcion,
                     Precio = request.Precio,
                     EstaActivo = true,
-                    UltimaActualizacion = DateTime.UtcNow,
-                    ComboDetalles = request.Productos.Select(p => new ComboDetalle
-                    {
-                        ProductoId = p.ProductoId,
-                        CantidadLibras = p.CantidadLibras
-                    }).ToList()
+                    UltimaActualizacion = DateTime.UtcNow
                 };
 
                 _context.Combos.Add(combo);
+                await _context.SaveChangesAsync();
+
+                var comboDetalles = request.Productos.Select(p => new ComboDetalle
+                {
+                    ComboId = combo.ComboId,
+                    Combo = combo,
+                    ProductoId = p.ProductoId,
+                    CantidadLibras = p.CantidadLibras,
+                    Producto = _context.Productos.Find(p.ProductoId) ?? throw new InvalidOperationException($"Producto con ID {p.ProductoId} no encontrado")
+                }).ToList();
+
+                _context.ComboDetalles.AddRange(comboDetalles);
                 await _context.SaveChangesAsync();
 
                 return await GetComboByIdAsync(combo.ComboId);
@@ -63,37 +70,109 @@ namespace MiBackend.Services
         public async Task<List<ComboResponse>> GetCombosAsync()
         {
             var combos = await _context.Combos
-                .Include(c => c.ComboDetalles)
-                    .ThenInclude(cd => cd.Producto)
+                .Select(c => new ComboResponse
+                {
+                    ComboId = c.ComboId,
+                    Nombre = c.Nombre,
+                    Descripcion = c.Descripcion,
+                    Precio = c.Precio,
+                    EstaActivo = c.EstaActivo,
+                    UltimaActualizacion = c.UltimaActualizacion,
+                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
+                    {
+                        ComboDetalleId = cd.ComboDetalleId,
+                        Producto = new ProductoResponse
+                        {
+                            ProductoId = cd.Producto.ProductoId,
+                            Nombre = cd.Producto.Nombre,
+                            CantidadLibras = cd.Producto.CantidadLibras,
+                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                            TipoEmpaque = cd.Producto.TipoEmpaque,
+                            EstaActivo = cd.Producto.EstaActivo,
+                            UltimaActualizacion = cd.Producto.UltimaActualizacion
+                        },
+                        CantidadLibras = cd.CantidadLibras
+                    }).ToList()
+                })
                 .OrderBy(c => c.Nombre)
+                .AsSplitQuery()
+                .AsNoTracking()
                 .ToListAsync();
 
-            return combos.Select(MapComboToResponse).ToList();
+            return combos;
         }
 
         public async Task<ComboResponse> GetComboByIdAsync(int id)
         {
             var combo = await _context.Combos
-                .Include(c => c.ComboDetalles)
-                    .ThenInclude(cd => cd.Producto)
+                .Select(c => new ComboResponse
+                {
+                    ComboId = c.ComboId,
+                    Nombre = c.Nombre,
+                    Descripcion = c.Descripcion,
+                    Precio = c.Precio,
+                    EstaActivo = c.EstaActivo,
+                    UltimaActualizacion = c.UltimaActualizacion,
+                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
+                    {
+                        ComboDetalleId = cd.ComboDetalleId,
+                        Producto = new ProductoResponse
+                        {
+                            ProductoId = cd.Producto.ProductoId,
+                            Nombre = cd.Producto.Nombre,
+                            CantidadLibras = cd.Producto.CantidadLibras,
+                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                            TipoEmpaque = cd.Producto.TipoEmpaque,
+                            EstaActivo = cd.Producto.EstaActivo,
+                            UltimaActualizacion = cd.Producto.UltimaActualizacion
+                        },
+                        CantidadLibras = cd.CantidadLibras
+                    }).ToList()
+                })
+                .AsSplitQuery()
+                .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.ComboId == id);
 
             if (combo == null)
                 throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
 
-            return MapComboToResponse(combo);
+            return combo;
         }
 
         public async Task<List<ComboResponse>> GetActiveCombosAsync()
         {
             var combos = await _context.Combos
-                .Include(c => c.ComboDetalles)
-                    .ThenInclude(cd => cd.Producto)
                 .Where(c => c.EstaActivo)
+                .Select(c => new ComboResponse
+                {
+                    ComboId = c.ComboId,
+                    Nombre = c.Nombre,
+                    Descripcion = c.Descripcion,
+                    Precio = c.Precio,
+                    EstaActivo = c.EstaActivo,
+                    UltimaActualizacion = c.UltimaActualizacion,
+                    Productos = c.ComboDetalles.Select(cd => new ComboDetalleResponse
+                    {
+                        ComboDetalleId = cd.ComboDetalleId,
+                        Producto = new ProductoResponse
+                        {
+                            ProductoId = cd.Producto.ProductoId,
+                            Nombre = cd.Producto.Nombre,
+                            CantidadLibras = cd.Producto.CantidadLibras,
+                            PrecioPorLibra = cd.Producto.PrecioPorLibra,
+                            TipoEmpaque = cd.Producto.TipoEmpaque,
+                            EstaActivo = cd.Producto.EstaActivo,
+                            UltimaActualizacion = cd.Producto.UltimaActualizacion
+                        },
+                        CantidadLibras = cd.CantidadLibras
+                    }).ToList()
+                })
                 .OrderBy(c => c.Nombre)
+                .AsSplitQuery()
+                .AsNoTracking()
                 .ToListAsync();
 
-            return combos.Select(MapComboToResponse).ToList();
+            return combos;
         }
 
         public async Task<bool> UpdateComboStatusAsync(int id, bool isActive)
@@ -145,39 +224,6 @@ namespace MiBackend.Services
                 throw new InvalidOperationException($"El combo no está activo");
 
             return combo.Precio * cantidad;
-        }
-
-        private static ComboResponse MapComboToResponse(Combo combo)
-        {
-            return new ComboResponse
-            {
-                ComboId = combo.ComboId,
-                Nombre = combo.Nombre,
-                Descripcion = combo.Descripcion,
-                Precio = combo.Precio,
-                EstaActivo = combo.EstaActivo,
-                UltimaActualizacion = combo.UltimaActualizacion,
-                Productos = combo.ComboDetalles.Select(cd => new ComboDetalleResponse
-                {
-                    ComboDetalleId = cd.ComboDetalleId,
-                    Producto = MapProductoToResponse(cd.Producto),
-                    CantidadLibras = cd.CantidadLibras
-                }).ToList()
-            };
-        }
-
-        private static ProductoResponse MapProductoToResponse(Producto producto)
-        {
-            return new ProductoResponse
-            {
-                ProductoId = producto.ProductoId,
-                Nombre = producto.Nombre,
-                CantidadLibras = producto.CantidadLibras,
-                PrecioPorLibra = producto.PrecioPorLibra,
-                TipoEmpaque = producto.TipoEmpaque,
-                EstaActivo = producto.EstaActivo,
-                UltimaActualizacion = producto.UltimaActualizacion
-            };
         }
     }
 } 

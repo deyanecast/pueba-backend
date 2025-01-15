@@ -11,7 +11,7 @@ namespace MiBackend.Models
         public int ProductoId { get; set; }
 
         [Column("nombre")]
-        public string Nombre { get; set; }
+        public required string Nombre { get; set; }
 
         [Column("cantidad_libras")]
         public decimal CantidadLibras { get; set; }
@@ -20,7 +20,7 @@ namespace MiBackend.Models
         public decimal PrecioPorLibra { get; set; }
 
         [Column("tipo_empaque")]
-        public string TipoEmpaque { get; set; }
+        public required string TipoEmpaque { get; set; }
 
         [Column("esta_activo")]
         public bool EstaActivo { get; set; }
@@ -29,7 +29,7 @@ namespace MiBackend.Models
         public DateTime UltimaActualizacion { get; set; }
 
         // Navigation properties
-        public virtual ICollection<VentaDetalle> VentaDetalles { get; set; }
-        public virtual ICollection<ComboDetalle> ComboDetalles { get; set; }
+        public List<VentaDetalle> VentaDetalles { get; set; } = new();
+        public List<ComboDetalle> ComboDetalles { get; set; } = new();
     }
 } 

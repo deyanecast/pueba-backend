@@ -49,3 +49,4 @@ msbuild.wrn
 *.usersecrets.json bin/
 obj/
 *.dll
+.env

@@ -12,10 +12,10 @@ namespace MiBackend.Models
         public int VentaId { get; set; }
 
         [Column("cliente")]
-        public string Cliente { get; set; }
+        public required string Cliente { get; set; }
 
         [Column("observaciones")]
-        public string Observaciones { get; set; }
+        public required string Observaciones { get; set; }
 
         [Column("fecha_venta")]
         public DateTime FechaVenta { get; set; }
@@ -24,9 +24,9 @@ namespace MiBackend.Models
         public decimal MontoTotal { get; set; }
 
         [Column("tipo_venta")]
-        public string TipoVenta { get; set; }
+        public required string TipoVenta { get; set; }
 
         // Navigation property
-        public virtual ICollection<VentaDetalle> VentaDetalles { get; set; }
+        public List<VentaDetalle> VentaDetalles { get; set; } = new();
     }
 } 

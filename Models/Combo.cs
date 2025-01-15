@@ -11,10 +11,10 @@ namespace MiBackend.Models
         public int ComboId { get; set; }
 
         [Column("nombre")]
-        public string Nombre { get; set; }
+        public required string Nombre { get; set; }
 
         [Column("descripcion")]
-        public string Descripcion { get; set; }
+        public required string Descripcion { get; set; }
 
         [Column("precio")]
         public decimal Precio { get; set; }
@@ -26,7 +26,7 @@ namespace MiBackend.Models
         public DateTime UltimaActualizacion { get; set; }
 
         // Navigation properties
-        public virtual ICollection<ComboDetalle> ComboDetalles { get; set; }
-        public virtual ICollection<VentaDetalle> VentaDetalles { get; set; }
+        public List<ComboDetalle> ComboDetalles { get; set; } = new();
+        public List<VentaDetalle> VentaDetalles { get; set; } = new();
     }
 } 
