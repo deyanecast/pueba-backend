@@ -139,7 +139,8 @@ namespace MiBackend.Services
                 .ToListAsync();
 
             var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5));
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(1000); // Tamaño estimado basado en la cantidad de datos
             _cache.Set(cacheKey, ventas, cacheOptions);
 
             return ventas;
@@ -211,7 +212,8 @@ namespace MiBackend.Services
                 throw new KeyNotFoundException($"Venta con ID {id} no encontrada");
 
             var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5));
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(100); // Tamaño estimado para una venta individual
             _cache.Set(cacheKey, venta, cacheOptions);
 
             return venta;
@@ -256,7 +258,8 @@ namespace MiBackend.Services
                 .ToListAsync();
 
             var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5));
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(500); // Tamaño estimado para un rango de ventas
             _cache.Set(cacheKey, ventas, cacheOptions);
 
             return ventas;
@@ -268,19 +271,31 @@ namespace MiBackend.Services
             var endDate = startDate.AddDays(1).AddTicks(-1);
             
             string cacheKey = $"TotalVentas_{startDate:yyyyMMdd}";
-            if (_cache.TryGetValue(cacheKey, out decimal cachedTotal))
-                return cachedTotal;
+            
+            try 
+            {
+                if (_cache.TryGetValue(cacheKey, out decimal cachedTotal))
+                    return cachedTotal;
 
-            var total = await _context.Ventas
-                .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
-                .AsNoTracking()
-                .SumAsync(v => v.MontoTotal);
+                var total = await _context.Ventas
+                    .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
+                    .Select(v => v.MontoTotal)
+                    .DefaultIfEmpty()
+                    .SumAsync();
 
-            var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5));
-            _cache.Set(cacheKey, total, cacheOptions);
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1); // Establecemos un tamaño fijo pequeño ya que solo es un decimal
 
-            return total;
+                _cache.Set(cacheKey, total, cacheOptions);
+
+                return total;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener el total de ventas para la fecha {Date}", date);
+                throw new InvalidOperationException("Error al obtener el total de ventas", ex);
+            }
         }
     }
 } 
