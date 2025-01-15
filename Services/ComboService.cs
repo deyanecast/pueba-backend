@@ -25,45 +25,65 @@ namespace MiBackend.Services
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
-                // Validar que todos los productos existan y tengan stock suficiente
-                foreach (var producto in request.Productos)
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    var existingProduct = await _context.Productos.FindAsync(producto.ProductoId);
-                    if (existingProduct == null)
-                        throw new KeyNotFoundException($"Producto con ID {producto.ProductoId} no encontrado");
+                    // Verificar productos y cargarlos en memoria
+                    var productosIds = request.Productos.Select(p => p.ProductoId).Distinct().ToList();
+                    var productos = await _context.Productos
+                        .AsNoTracking()
+                        .Where(p => productosIds.Contains(p.ProductoId))
+                        .ToDictionaryAsync(p => p.ProductoId, p => p);
 
-                    if (!existingProduct.EstaActivo)
-                        throw new InvalidOperationException($"El producto {existingProduct.Nombre} no está activo");
+                    // Verificar que todos los productos existan
+                    var productosNoEncontrados = productosIds
+                        .Where(id => !productos.ContainsKey(id))
+                        .ToList();
 
-                    if (!await _productoService.ValidateProductoStockAsync(producto.ProductoId, producto.CantidadLibras))
-                        throw new InvalidOperationException($"Stock insuficiente para el producto {existingProduct.Nombre}");
+                    if (productosNoEncontrados.Any())
+                    {
+                        throw new KeyNotFoundException(
+                            $"Los siguientes productos no fueron encontrados: {string.Join(", ", productosNoEncontrados)}");
+                    }
+
+                    // Crear el combo
+                    var combo = new Combo
+                    {
+                        Nombre = request.Nombre,
+                        Descripcion = request.Descripcion,
+                        Precio = request.Precio,
+                        EstaActivo = true,
+                        UltimaActualizacion = DateTime.UtcNow
+                    };
+
+                    _context.Combos.Add(combo);
+                    await _context.SaveChangesAsync();
+
+                    // Crear los detalles del combo
+                    var detalles = request.Productos.Select(detalle => new ComboDetalle
+                    {
+                        ComboId = combo.ComboId,
+                        ProductoId = detalle.ProductoId,
+                        CantidadLibras = detalle.CantidadLibras
+                    }).ToList();
+
+                    // Establecer el estado de los detalles como Added
+                    foreach (var detalle in detalles)
+                    {
+                        _context.Entry(detalle).State = EntityState.Added;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Cargar el combo completo
+                    return await GetComboByIdAsync(combo.ComboId);
                 }
-
-                var combo = new Combo
+                catch (Exception)
                 {
-                    Nombre = request.Nombre,
-                    Descripcion = request.Descripcion,
-                    Precio = request.Precio,
-                    EstaActivo = true,
-                    UltimaActualizacion = DateTime.UtcNow
-                };
-
-                _context.Combos.Add(combo);
-                await _context.SaveChangesAsync();
-
-                var comboDetalles = request.Productos.Select(p => new ComboDetalle
-                {
-                    ComboId = combo.ComboId,
-                    Combo = combo,
-                    ProductoId = p.ProductoId,
-                    CantidadLibras = p.CantidadLibras,
-                    Producto = _context.Productos.Find(p.ProductoId) ?? throw new InvalidOperationException($"Producto con ID {p.ProductoId} no encontrado")
-                }).ToList();
-
-                _context.ComboDetalles.AddRange(comboDetalles);
-                await _context.SaveChangesAsync();
-
-                return await GetComboByIdAsync(combo.ComboId);
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             });
         }
 

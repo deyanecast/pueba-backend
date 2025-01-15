@@ -6,6 +6,7 @@ using MiBackend.Repositories;
 using MiBackend.Services;
 using MiBackend.Strategies;
 using DotNetEnv;
+using Microsoft.AspNetCore.ResponseCompression;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,7 +52,20 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add Memory Cache
-builder.Services.AddMemoryCache();
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1024 * 1024 * 50; // 50MB limit
+    options.CompactionPercentage = 0.2; // 20% compaction
+    options.ExpirationScanFrequency = TimeSpan.FromMinutes(5);
+});
+
+// Add Response Compression
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+        new[] { "application/json" });
+});
 
 // Configure CORS
 builder.Services.AddCors(options =>
@@ -70,20 +84,18 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
         npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(3),
             errorCodesToAdd: null);
-        npgsqlOptions.CommandTimeout(30);
+        npgsqlOptions.CommandTimeout(15);
         npgsqlOptions.MinBatchSize(1);
-        npgsqlOptions.MaxBatchSize(100);
+        npgsqlOptions.MaxBatchSize(50);
     });
     
-    // Habilitar logging detallado
-    if (builder.Environment.IsDevelopment())
-    {
-        options.EnableDetailedErrors();
-        options.EnableSensitiveDataLogging();
-    }
+    // Optimizaciones de rendimiento
+    options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTrackingWithIdentityResolution);
+    options.EnableSensitiveDataLogging(builder.Environment.IsDevelopment());
+    options.EnableDetailedErrors(builder.Environment.IsDevelopment());
 });
 
 // Configure DI
@@ -115,6 +127,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseResponseCompression();
 app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();

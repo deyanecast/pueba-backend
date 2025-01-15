@@ -39,17 +39,52 @@ namespace MiBackend.Data
                 .HasForeignKey(vd => vd.ComboId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<ComboDetalle>()
-                .HasOne(cd => cd.Combo)
-                .WithMany(c => c.ComboDetalles)
-                .HasForeignKey(cd => cd.ComboId)
-                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ComboDetalle>(entity =>
+            {
+                entity.ToTable("combo_detalles");
+                
+                entity.HasKey(e => e.ComboDetalleId)
+                    .HasName("combo_detalles_pkey");
+
+                entity.Property(e => e.ComboDetalleId)
+                    .HasColumnName("combo_detalle_id")
+                    .UseIdentityAlwaysColumn();
+
+                entity.Property(e => e.ComboId)
+                    .HasColumnName("combo_id");
+
+                entity.Property(e => e.ProductoId)
+                    .HasColumnName("producto_id");
+
+                entity.Property(e => e.CantidadLibras)
+                    .HasColumnName("cantidad_libras");
+
+                entity.HasOne(d => d.Combo)
+                    .WithMany(p => p.ComboDetalles)
+                    .HasForeignKey(d => d.ComboId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(d => d.Producto)
+                    .WithMany(p => p.ComboDetalles)
+                    .HasForeignKey(d => d.ProductoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Configuración de índices para optimizar consultas
+            modelBuilder.Entity<Venta>()
+                .HasIndex(v => v.FechaVenta);
+
+            modelBuilder.Entity<VentaDetalle>()
+                .HasIndex(vd => new { vd.VentaId, vd.TipoItem });
+
+            modelBuilder.Entity<Producto>()
+                .HasIndex(p => p.EstaActivo);
+
+            modelBuilder.Entity<Combo>()
+                .HasIndex(c => c.EstaActivo);
 
             modelBuilder.Entity<ComboDetalle>()
-                .HasOne(cd => cd.Producto)
-                .WithMany(p => p.ComboDetalles)
-                .HasForeignKey(cd => cd.ProductoId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .HasIndex(cd => new { cd.ComboId, cd.ProductoId });
 
             // Configuración de checks y validaciones
             modelBuilder.Entity<VentaDetalle>()
