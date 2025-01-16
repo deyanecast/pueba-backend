@@ -8,16 +8,14 @@ namespace MiBackend.Models
     {
         [Key]
         [Column("detalle_venta_id")]
-        public int DetalleVentaId { get; set; }
+        public int VentaDetalleId { get; set; }
 
         [Column("venta_id")]
         public int VentaId { get; set; }
 
-        [Column("producto_id")]
-        public int? ProductoId { get; set; }
-
-        [Column("combo_id")]
-        public int? ComboId { get; set; }
+        [Column("tipo_item")]
+        [StringLength(20)]
+        public required string TipoItem { get; set; } = "PRODUCTO";
 
         [Column("cantidad_libras")]
         public decimal CantidadLibras { get; set; }
@@ -28,12 +26,14 @@ namespace MiBackend.Models
         [Column("subtotal")]
         public decimal Subtotal { get; set; }
 
-        [Column("tipo_item")]
-        public required string TipoItem { get; set; }
+        [Column("producto_id")]
+        public int? ProductoId { get; set; }
 
-        // Navigation properties
-        public required Venta Venta { get; set; }
-        public Producto? Producto { get; set; }
-        public Combo? Combo { get; set; }
+        [Column("combo_id")]
+        public int? ComboId { get; set; }
+
+        public virtual Venta? Venta { get; set; }
+        public virtual Producto? Producto { get; set; }
+        public virtual Combo? Combo { get; set; }
     }
 } 

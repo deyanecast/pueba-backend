@@ -11,22 +11,28 @@ namespace MiBackend.Models
         [Column("venta_id")]
         public int VentaId { get; set; }
 
+        [Required]
         [Column("cliente")]
+        [StringLength(100)]
         public required string Cliente { get; set; }
 
         [Column("observaciones")]
-        public required string Observaciones { get; set; }
+        [StringLength(500)]
+        public string? Observaciones { get; set; }
 
+        [Required]
+        [Column("tipo_venta")]
+        [StringLength(20)]
+        public string TipoVenta { get; set; } = "INDIVIDUAL";
+
+        [Required]
         [Column("fecha_venta")]
         public DateTime FechaVenta { get; set; }
 
-        [Column("monto_total")]
-        public decimal MontoTotal { get; set; }
+        [Required]
+        [Column("monto_total", TypeName = "decimal(18,2)")]
+        public decimal Total { get; set; }
 
-        [Column("tipo_venta")]
-        public required string TipoVenta { get; set; }
-
-        // Navigation property
-        public List<VentaDetalle> VentaDetalles { get; set; } = new();
+        public virtual ICollection<VentaDetalle> VentaDetalles { get; set; } = new List<VentaDetalle>();
     }
 } 

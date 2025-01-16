@@ -1,12 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MiBackend.Data;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
+using MiBackend.Extensions;
+using MiBackend.Interfaces;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
+using Microsoft.Extensions.DependencyInjection;
 using MiBackend.Strategies;
-using Microsoft.Extensions.Logging;
+using MiBackend.Helpers;
 
 namespace MiBackend.Services
 {
@@ -14,342 +21,248 @@ namespace MiBackend.Services
     {
         private readonly ApplicationDbContext _context;
         private readonly IMemoryCache _cache;
-        private readonly IEnumerable<IVentaItemStrategy> _strategies;
-        private readonly ILogger<VentaService> _logger;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IServiceProvider _serviceProvider;
 
-        public VentaService(
-            ApplicationDbContext context,
-            IMemoryCache cache,
-            IEnumerable<IVentaItemStrategy> strategies,
-            ILogger<VentaService> logger)
+        public VentaService(ApplicationDbContext context, IMemoryCache cache, IUnitOfWork unitOfWork, IServiceProvider serviceProvider)
         {
             _context = context;
             _cache = cache;
-            _strategies = strategies;
-            _logger = logger;
+            _unitOfWork = unitOfWork;
+            _serviceProvider = serviceProvider;
         }
 
-        public async Task<VentaResponse> CreateVentaAsync(CreateVentaRequest request)
+        public async Task<VentaResponse?> GetVentaByIdAsync(int id)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
-            {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    _logger.LogInformation("Iniciando creación de venta para cliente: {Cliente}", request.Cliente);
+            string cacheKey = $"venta_{id}";
 
-                    var venta = new Venta
-                    {
-                        Cliente = request.Cliente,
-                        Observaciones = request.Observaciones,
-                        TipoVenta = request.TipoVenta,
-                        FechaVenta = DateTime.UtcNow,
-                        MontoTotal = 0
-                    };
-
-                    _context.Ventas.Add(venta);
-                    await _context.SaveChangesAsync();
-
-                    decimal montoTotal = 0;
-                    var detalles = new List<VentaDetalle>();
-
-                    foreach (var detalle in request.Detalles)
-                    {
-                        _logger.LogInformation("Procesando detalle de tipo: {TipoItem}", detalle.TipoItem);
-
-                        var itemStrategy = _strategies.FirstOrDefault(s => 
-                            s.GetType().Name.StartsWith(detalle.TipoItem, StringComparison.OrdinalIgnoreCase) ||
-                            s.GetType().Name.Contains(detalle.TipoItem, StringComparison.OrdinalIgnoreCase))
-                            ?? throw new InvalidOperationException($"Tipo de item no soportado: {detalle.TipoItem}");
-
-                        var ventaDetalle = await itemStrategy.ProcessVentaDetalleAsync(venta, detalle);
-                        detalles.Add(ventaDetalle);
-                        montoTotal += ventaDetalle.Subtotal;
-
-                        _logger.LogInformation("Detalle procesado correctamente. Subtotal: {Subtotal}", ventaDetalle.Subtotal);
-                    }
-
-                    await _context.VentaDetalles.AddRangeAsync(detalles);
-                    venta.MontoTotal = montoTotal;
-
-                    _logger.LogInformation("Guardando cambios en la base de datos...");
-                    await _context.SaveChangesAsync();
-
-                    _logger.LogInformation("Confirmando transacción...");
-                    await transaction.CommitAsync();
-
-                    // Invalidar caché relacionado
-                    var cacheKeys = new[] { "AllVentas", $"Ventas_{venta.FechaVenta:yyyyMMdd}" };
-                    foreach (var key in cacheKeys)
-                    {
-                        _cache.Remove(key);
-                    }
-
-                    _logger.LogInformation("Venta creada exitosamente con ID: {VentaId}", venta.VentaId);
-                    return await GetVentaByIdAsync(venta.VentaId);
-                }
-                catch (DbUpdateException ex)
-                {
-                    _logger.LogError(ex, "Error al guardar cambios en la base de datos: {Message}", ex.InnerException?.Message ?? ex.Message);
-                    await transaction.RollbackAsync();
-                    throw new InvalidOperationException($"Error al guardar la venta: {ex.InnerException?.Message ?? ex.Message}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error al procesar la venta: {Message}", ex.Message);
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            });
-        }
-
-        public async Task<List<VentaResponse>> GetVentasAsync()
-        {
-            const string cacheKey = "AllVentas";
-            
-            if (_cache.TryGetValue(cacheKey, out List<VentaResponse>? cachedVentas) && cachedVentas != null)
-            {
-                return cachedVentas;
-            }
-
-            var ventas = await _context.Ventas
-                .Select(v => new VentaResponse
-                {
-                    VentaId = v.VentaId,
-                    Cliente = v.Cliente,
-                    Observaciones = v.Observaciones,
-                    FechaVenta = v.FechaVenta,
-                    MontoTotal = v.MontoTotal,
-                    TipoVenta = v.TipoVenta,
-                    Detalles = v.VentaDetalles.Select(d => new VentaDetalleResponse
-                    {
-                        DetalleVentaId = d.DetalleVentaId,
-                        TipoItem = d.TipoItem,
-                        CantidadLibras = d.CantidadLibras,
-                        PrecioUnitario = d.PrecioUnitario,
-                        Subtotal = d.Subtotal,
-                        Producto = d.Producto != null ? MapProductoToResponse(d.Producto) : null,
-                        Combo = d.Combo != null ? MapComboToResponse(d.Combo) : null
-                    }).ToList()
-                })
-                .OrderByDescending(v => v.FechaVenta)
-                .AsSplitQuery()
-                .AsNoTracking()
-                .ToListAsync();
-
-            var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(1000); // Tamaño estimado basado en la cantidad de datos
-            _cache.Set(cacheKey, ventas, cacheOptions);
-
-            return ventas;
-        }
-
-        private static ProductoResponse MapProductoToResponse(Producto? producto)
-        {
-            if (producto == null)
-                throw new ArgumentNullException(nameof(producto));
-
-            return new()
-            {
-                ProductoId = producto.ProductoId,
-                Nombre = producto.Nombre,
-                CantidadLibras = producto.CantidadLibras,
-                PrecioPorLibra = producto.PrecioPorLibra,
-                TipoEmpaque = producto.TipoEmpaque,
-                EstaActivo = producto.EstaActivo,
-                UltimaActualizacion = producto.UltimaActualizacion
-            };
-        }
-
-        private static ComboResponse MapComboToResponse(Combo combo) =>
-            new()
-            {
-                ComboId = combo.ComboId,
-                Nombre = combo.Nombre,
-                Descripcion = combo.Descripcion,
-                Precio = combo.Precio,
-                EstaActivo = combo.EstaActivo,
-                UltimaActualizacion = combo.UltimaActualizacion,
-                Productos = combo.ComboDetalles.Select(cd => new ComboDetalleResponse
-                {
-                    ComboDetalleId = cd.ComboDetalleId,
-                    Producto = MapProductoToResponse(cd.Producto),
-                    CantidadLibras = cd.CantidadLibras
-                }).ToList()
-            };
-
-        public async Task<VentaResponse> GetVentaByIdAsync(int id)
-        {
-            string cacheKey = $"Venta_{id}";
-            
-            if (_cache.TryGetValue(cacheKey, out VentaResponse? cachedVenta) && cachedVenta != null)
-            {
+            if (_cache.TryGetValue(cacheKey, out VentaResponse cachedVenta))
                 return cachedVenta;
-            }
 
             var venta = await _context.Ventas
-                .Select(v => new VentaResponse
-                {
-                    VentaId = v.VentaId,
-                    Cliente = v.Cliente,
-                    Observaciones = v.Observaciones,
-                    FechaVenta = v.FechaVenta,
-                    MontoTotal = v.MontoTotal,
-                    TipoVenta = v.TipoVenta,
-                    Detalles = v.VentaDetalles.Select(d => new VentaDetalleResponse
-                    {
-                        DetalleVentaId = d.DetalleVentaId,
-                        TipoItem = d.TipoItem,
-                        CantidadLibras = d.CantidadLibras,
-                        PrecioUnitario = d.PrecioUnitario,
-                        Subtotal = d.Subtotal,
-                        Producto = d.Producto != null ? MapProductoToResponse(d.Producto) : null,
-                        Combo = d.Combo != null ? MapComboToResponse(d.Combo) : null
-                    }).ToList()
-                })
-                .AsSplitQuery()
-                .AsNoTracking()
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Producto)
+                .Include(v => v.VentaDetalles)
+                    .ThenInclude(vd => vd.Combo)
                 .FirstOrDefaultAsync(v => v.VentaId == id);
 
             if (venta == null)
-                throw new KeyNotFoundException($"Venta con ID {id} no encontrada");
+                return null;
 
-            var cacheOptions = new MemoryCacheEntryOptions()
+            var ventaResponse = new VentaResponse
+            {
+                VentaId = venta.VentaId,
+                Cliente = venta.Cliente,
+                Observaciones = venta.Observaciones,
+                TipoVenta = venta.TipoVenta,
+                FechaVenta = venta.FechaVenta,
+                Total = venta.Total,
+                Detalles = venta.VentaDetalles.Select(vd => new VentaDetalleResponse
+                {
+                    VentaDetalleId = vd.VentaDetalleId,
+                    TipoItem = vd.TipoItem,
+                    Cantidad = vd.CantidadLibras,
+                    Total = vd.Subtotal
+                }).ToList()
+            };
+
+            var cacheEntryOptions = new MemoryCacheEntryOptions()
                 .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(100); // Tamaño estimado para una venta individual
-            _cache.Set(cacheKey, venta, cacheOptions);
+                .SetSize(1);
 
-            return venta;
+            _cache.Set(cacheKey, ventaResponse, cacheEntryOptions);
+
+            return ventaResponse;
         }
 
-        public async Task<List<VentaResponse>> GetVentasByDateRangeAsync(DateTime startDate, DateTime endDate)
+        public async Task<List<VentaResponse>> GetVentasByDateAsync(DateTime date)
         {
-            startDate = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
-            endDate = DateTime.SpecifyKind(endDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+            string cacheKey = $"ventas_date_{date:yyyy-MM-dd}";
 
-            string cacheKey = $"Ventas_{startDate:yyyyMMdd}_{endDate:yyyyMMdd}";
-            
-            if (_cache.TryGetValue(cacheKey, out List<VentaResponse>? cachedVentas) && cachedVentas != null)
-            {
+            if (_cache.TryGetValue(cacheKey, out List<VentaResponse> cachedVentas))
                 return cachedVentas;
-            }
 
-            var ventas = await _context.Ventas
-                .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
+            var ventasPorFecha = await _context.Ventas
+                .Where(v => v.FechaVenta.Date == date.Date)
+                .OrderByDescending(v => v.FechaVenta)
                 .Select(v => new VentaResponse
                 {
                     VentaId = v.VentaId,
                     Cliente = v.Cliente,
                     Observaciones = v.Observaciones,
-                    FechaVenta = v.FechaVenta,
-                    MontoTotal = v.MontoTotal,
                     TipoVenta = v.TipoVenta,
-                    Detalles = v.VentaDetalles.Select(d => new VentaDetalleResponse
+                    FechaVenta = v.FechaVenta,
+                    Total = v.Total,
+                    Detalles = v.VentaDetalles.Select(vd => new VentaDetalleResponse
                     {
-                        DetalleVentaId = d.DetalleVentaId,
-                        TipoItem = d.TipoItem,
-                        CantidadLibras = d.CantidadLibras,
-                        PrecioUnitario = d.PrecioUnitario,
-                        Subtotal = d.Subtotal,
-                        Producto = d.Producto != null ? MapProductoToResponse(d.Producto) : null,
-                        Combo = d.Combo != null ? MapComboToResponse(d.Combo) : null
+                        VentaDetalleId = vd.VentaDetalleId,
+                        TipoItem = vd.TipoItem,
+                        Cantidad = vd.CantidadLibras,
+                        Total = vd.Subtotal
                     }).ToList()
                 })
-                .OrderByDescending(v => v.FechaVenta)
-                .AsSplitQuery()
-                .AsNoTracking()
                 .ToListAsync();
 
-            var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(500); // Tamaño estimado para un rango de ventas
-            _cache.Set(cacheKey, ventas, cacheOptions);
+            if (!ventasPorFecha.Any())
+                return new List<VentaResponse>();
 
-            return ventas;
+            var cacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(1);
+
+            _cache.Set(cacheKey, ventasPorFecha, cacheEntryOptions);
+
+            return ventasPorFecha;
         }
 
         public async Task<decimal> GetTotalVentasByDateAsync(DateTime date)
         {
-            var startDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
-            var endDate = startDate.AddDays(1).AddTicks(-1);
-            
-            string cacheKey = $"TotalVentas_{startDate:yyyyMMdd}";
-            
-            try 
+            string cacheKey = $"total_ventas_date_{date:yyyy-MM-dd}";
+
+            if (_cache.TryGetValue(cacheKey, out decimal cachedTotal))
+                return cachedTotal;
+
+            var total = await _context.Ventas
+                .Where(v => v.FechaVenta.Date == date.Date)
+                .SumAsync(v => v.Total);
+
+            var cacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(1);
+
+            _cache.Set(cacheKey, total, cacheEntryOptions);
+
+            return total;
+        }
+
+        public async Task<List<VentaResponse>> GetVentasByDateRangeAsync(DateTime startDate, DateTime endDate)
+        {
+            string cacheKey = $"ventas_range_{startDate:yyyy-MM-dd}_{endDate:yyyy-MM-dd}";
+
+            if (_cache.TryGetValue(cacheKey, out List<VentaResponse> cachedVentas))
+                return cachedVentas;
+
+            var startDateTime = startDate.ToStartOfDay();
+            var endDateTime = endDate.ToEndOfDay();
+
+            var ventasPorRango = await _context.Ventas
+                .Where(v => v.FechaVenta >= startDateTime && 
+                       v.FechaVenta <= endDateTime)
+                .OrderByDescending(v => v.FechaVenta)
+                .Select(v => new VentaResponse
+                {
+                    VentaId = v.VentaId,
+                    Cliente = v.Cliente,
+                    Observaciones = v.Observaciones,
+                    TipoVenta = v.TipoVenta,
+                    FechaVenta = v.FechaVenta,
+                    Total = v.Total,
+                    Detalles = v.VentaDetalles.Select(vd => new VentaDetalleResponse
+                    {
+                        VentaDetalleId = vd.VentaDetalleId,
+                        TipoItem = vd.TipoItem,
+                        Cantidad = vd.CantidadLibras,
+                        Total = vd.Subtotal
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            if (!ventasPorRango.Any())
+                return new List<VentaResponse>();
+
+            var cacheEntryOptions = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(1);
+
+            _cache.Set(cacheKey, ventasPorRango, cacheEntryOptions);
+
+            return ventasPorRango;
+        }
+
+        public async Task<VentaResponse> CreateVentaAsync(CreateVentaRequest request)
+        {
+            try
             {
-                if (_cache.TryGetValue(cacheKey, out decimal cachedTotal))
-                    return cachedTotal;
+                await _unitOfWork.BeginTransactionAsync();
 
-                var total = await _context.Ventas
-                    .Where(v => v.FechaVenta >= startDate && v.FechaVenta <= endDate)
-                    .Select(v => v.MontoTotal)
-                    .DefaultIfEmpty()
-                    .SumAsync();
+                var venta = new Venta
+                {
+                    Cliente = request.Cliente,
+                    Observaciones = request.Observaciones,
+                    TipoVenta = request.TipoVenta,
+                    FechaVenta = DateTime.UtcNow,
+                    Total = 0
+                };
 
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                    .SetSize(1);
+                await _unitOfWork.Repository<Venta>().AddAsync(venta);
+                await _unitOfWork.SaveChangesAsync();
 
-                _cache.Set(cacheKey, total, cacheOptions);
+                decimal totalVenta = 0;
+                var ventaDetalles = new List<VentaDetalle>();
 
-                return total;
+                foreach (var detalle in request.Detalles)
+                {
+                    IVentaItemStrategy strategy = detalle.TipoItem switch
+                    {
+                        "PRODUCTO" => _serviceProvider.GetRequiredService<ProductoVentaStrategy>(),
+                        "COMBO" => _serviceProvider.GetRequiredService<ComboVentaStrategy>(),
+                        _ => throw new InvalidOperationException($"Tipo de item no válido: {detalle.TipoItem}")
+                    };
+
+                    var ventaDetalle = await strategy.ProcessVentaDetalleAsync(venta, detalle);
+                    ventaDetalles.Add(ventaDetalle);
+                    totalVenta += ventaDetalle.Subtotal;
+
+                    await _unitOfWork.Repository<VentaDetalle>().AddAsync(ventaDetalle);
+                }
+
+                venta.Total = totalVenta;
+                venta.VentaDetalles = ventaDetalles;
+                _unitOfWork.Repository<Venta>().Update(venta);
+                
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
+                // Invalidar el caché
+                var cacheKeys = _cache.GetKeys<string>().Where(k => k.StartsWith("ventas_") || k.StartsWith("total_ventas_"));
+                foreach (var key in cacheKeys)
+                {
+                    _cache.Remove(key);
+                }
+
+                var response = await GetVentaByIdAsync(venta.VentaId);
+                if (response == null)
+                    throw new InvalidOperationException("No se pudo crear la venta");
+
+                return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener el total de ventas para la fecha {Date}", date);
-                throw new InvalidOperationException("Error al obtener el total de ventas", ex);
+                await _unitOfWork.RollbackTransactionAsync();
+                throw new InvalidOperationException($"Error al crear la venta: {ex.Message}", ex);
             }
         }
 
         public async Task<DashboardResponse> GetDashboardDataAsync()
         {
-            string cacheKey = "DashboardData";
-            
-            try 
+            var today = DateTime.UtcNow.Date;
+            var ventasDelDia = await GetTotalVentasByDateAsync(today);
+
+            return new DashboardResponse
             {
-                if (_cache.TryGetValue(cacheKey, out DashboardResponse? cachedData) && cachedData != null)
-                    return cachedData;
-
-                var today = DateTime.UtcNow.Date;
-                var ventasHoy = await GetTotalVentasByDateAsync(today);
-
-                var productosStockBajo = await _context.Productos
-                    .Where(p => p.EstaActivo && p.CantidadLibras < 10)
-                    .Select(p => new ProductoStockBajoResponse 
+                VentasDelDia = ventasDelDia,
+                FechaActualizacion = DateTime.UtcNow,
+                TotalProductosActivos = await _context.Productos.CountAsync(p => p.EstaActivo),
+                ProductosStockBajo = await _context.Productos
+                    .Where(p => p.CantidadLibras < 10 && p.EstaActivo)
+                    .Select(p => new ProductoStockBajoResponse
                     {
                         ProductoId = p.ProductoId,
                         Nombre = p.Nombre,
                         CantidadLibras = p.CantidadLibras
                     })
-                    .ToListAsync();
-
-                var productosActivos = await _context.Productos
-                    .Where(p => p.EstaActivo)
-                    .CountAsync();
-
-                var dashboardData = new DashboardResponse
-                {
-                    VentasDelDia = ventasHoy,
-                    FechaActualizacion = today,
-                    ProductosStockBajo = productosStockBajo,
-                    TotalProductosActivos = productosActivos
-                };
-
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                    .SetSize(50);
-
-                _cache.Set(cacheKey, dashboardData, cacheOptions);
-
-                return dashboardData;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener datos del dashboard");
-                throw new InvalidOperationException("Error al obtener datos del dashboard", ex);
-            }
+                    .ToListAsync()
+            };
         }
     }
 } 

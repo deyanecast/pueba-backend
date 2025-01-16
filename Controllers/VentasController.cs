@@ -1,120 +1,137 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
 using MiBackend.Interfaces.Services;
+using MiBackend.Helpers;
 
-namespace MiBackend.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class VentasController : ControllerBase
+namespace MiBackend.Controllers
 {
-    private readonly IVentaService _ventaService;
-
-    public VentasController(IVentaService ventaService)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class VentasController : ControllerBase
     {
-        _ventaService = ventaService;
-    }
+        private readonly IVentaService _ventaService;
 
-    [HttpPost]
-    [Consumes("application/json")]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<VentaResponse>> CreateVenta([FromBody] CreateVentaRequest request)
-    {
-        if (!ModelState.IsValid)
+        public VentasController(IVentaService ventaService)
         {
-            return BadRequest(ModelState);
+            _ventaService = ventaService;
         }
 
-        try
+        [HttpGet]
+        public async Task<IActionResult> GetVentasByDate([FromQuery] string? date)
         {
-            var response = await _ventaService.CreateVentaAsync(request);
-            return CreatedAtAction(nameof(GetVentaById), new { id = response.VentaId }, response);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al crear la venta", error = ex.Message });
-        }
-    }
+            try
+            {
+                var fechaConsulta = date != null 
+                    ? DateTimeHelper.ParseFlexible(date).ToStartOfDay()
+                    : DateTime.UtcNow.ToStartOfDay();
 
-    [HttpGet]
-    public async Task<ActionResult<List<VentaResponse>>> GetVentas()
-    {
-        try
-        {
-            var ventas = await _ventaService.GetVentasAsync();
-            return Ok(ventas);
+                var ventas = await _ventaService.GetVentasByDateAsync(fechaConsulta);
+                return Ok(ventas);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al obtener ventas: {ex.Message}" });
+            }
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al obtener las ventas", error = ex.Message });
-        }
-    }
 
-    [HttpGet("{id}")]
-    public async Task<ActionResult<VentaResponse>> GetVentaById(int id)
-    {
-        try
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetVentaById(int id)
         {
-            var venta = await _ventaService.GetVentaByIdAsync(id);
-            return Ok(venta);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { message = $"Venta con ID {id} no encontrada" });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al obtener la venta", error = ex.Message });
-        }
-    }
+            try
+            {
+                var venta = await _ventaService.GetVentaByIdAsync(id);
+                if (venta == null)
+                    return NotFound(new { message = $"Venta con ID {id} no encontrada" });
 
-    [HttpGet("range")]
-    public async Task<ActionResult<List<VentaResponse>>> GetVentasByDateRange(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate)
-    {
-        try
-        {
-            var ventas = await _ventaService.GetVentasByDateRangeAsync(startDate, endDate);
-            return Ok(ventas);
+                return Ok(venta);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al obtener venta: {ex.Message}" });
+            }
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al obtener las ventas por rango de fecha", error = ex.Message });
-        }
-    }
 
-    [HttpGet("total/date")]
-    public async Task<ActionResult<decimal>> GetTotalVentasByDate([FromQuery] DateTime date)
-    {
-        try
+        [HttpGet("range")]
+        public async Task<IActionResult> GetVentasByDateRange([FromQuery] string startDate, [FromQuery] string endDate)
         {
-            var total = await _ventaService.GetTotalVentasByDateAsync(date);
-            return Ok(new { date = date.Date, total });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al obtener el total de ventas", error = ex.Message });
-        }
-    }
+            try
+            {
+                var fechaInicio = DateTimeHelper.ParseFlexible(startDate);
+                var fechaFin = DateTimeHelper.ParseFlexible(endDate);
 
-    [HttpGet("dashboard")]
-    public async Task<ActionResult<DashboardResponse>> GetDashboardData()
-    {
-        try
-        {
-            var dashboardData = await _ventaService.GetDashboardDataAsync();
-            return Ok(dashboardData);
+                if (fechaInicio > fechaFin)
+                    return BadRequest(new { message = "La fecha inicial debe ser menor o igual a la fecha final" });
+
+                var ventas = await _ventaService.GetVentasByDateRangeAsync(fechaInicio, fechaFin);
+                return Ok(new { 
+                    startDate = fechaInicio.ToString("yyyy-MM-dd"),
+                    endDate = fechaFin.ToString("yyyy-MM-dd"),
+                    ventas = ventas ?? new List<VentaResponse>()
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al obtener ventas por rango de fechas: {ex.Message}" });
+            }
         }
-        catch (Exception ex)
+
+        [HttpGet("total/date")]
+        public async Task<IActionResult> GetTotalVentasByDate([FromQuery] string date)
         {
-            return StatusCode(500, new { message = "Error al obtener datos del dashboard", error = ex.Message });
+            try
+            {
+                var fechaConsulta = DateTimeHelper.ParseFlexible(date).ToStartOfDay();
+                var total = await _ventaService.GetTotalVentasByDateAsync(fechaConsulta);
+                return Ok(new { total });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al obtener total de ventas: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("dashboard")]
+        public async Task<IActionResult> GetDashboardData()
+        {
+            try
+            {
+                var dashboardData = await _ventaService.GetDashboardDataAsync();
+                return Ok(dashboardData);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al obtener datos del dashboard: {ex.Message}" });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateVenta([FromBody] CreateVentaRequest request)
+        {
+            try
+            {
+                var venta = await _ventaService.CreateVentaAsync(request);
+                return CreatedAtAction(nameof(GetVentaById), new { id = venta.VentaId }, venta);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error al crear venta: {ex.Message}" });
+            }
         }
     }
 } 

@@ -1,38 +1,44 @@
-using Microsoft.EntityFrameworkCore;
-using MiBackend.Data;
 using MiBackend.DTOs.Requests;
+using MiBackend.Interfaces;
+using MiBackend.Interfaces.Services;
 using MiBackend.Models;
 
 namespace MiBackend.Strategies
 {
     public class ProductoVentaStrategy : IVentaItemStrategy
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IProductoService _productoService;
 
-        public ProductoVentaStrategy(ApplicationDbContext context)
+        public ProductoVentaStrategy(IProductoService productoService)
         {
-            _context = context;
+            _productoService = productoService;
         }
 
         public async Task<VentaDetalle> ProcessVentaDetalleAsync(Venta venta, CreateVentaDetalleRequest detalle)
         {
-            var producto = await _context.Productos.FindAsync(detalle.ProductoId)
-                ?? throw new KeyNotFoundException($"Producto con ID {detalle.ProductoId} no encontrado");
+            // Validar stock
+            if (!await _productoService.ValidateProductoStockAsync(detalle.ItemId, detalle.Cantidad))
+            {
+                throw new InvalidOperationException($"Stock insuficiente para el producto con ID {detalle.ItemId}");
+            }
 
-            if (producto.CantidadLibras < detalle.CantidadLibras)
-                throw new InvalidOperationException($"Stock insuficiente para el producto {producto.Nombre}");
+            // Calcular total
+            var total = await _productoService.CalculateProductoTotalAsync(detalle.ItemId, detalle.Cantidad);
+            var precioUnitario = await _productoService.GetPrecioProductoAsync(detalle.ItemId);
 
-            producto.CantidadLibras -= detalle.CantidadLibras;
-            
+            // Actualizar stock del producto
+            await _productoService.UpdateProductoStockAsync(detalle.ItemId, -detalle.Cantidad);
+
+            // Crear detalle de venta
             var ventaDetalle = new VentaDetalle
             {
-                Venta = venta,
-                TipoItem = "PRODUCTO",
-                ProductoId = producto.ProductoId,
-                Producto = producto,
-                CantidadLibras = detalle.CantidadLibras,
-                PrecioUnitario = producto.PrecioPorLibra,
-                Subtotal = detalle.CantidadLibras * producto.PrecioPorLibra
+                VentaId = venta.VentaId,
+                TipoItem = detalle.TipoItem,
+                ProductoId = detalle.ItemId,
+                CantidadLibras = detalle.Cantidad,
+                PrecioUnitario = precioUnitario,
+                Subtotal = total,
+                Venta = venta
             };
 
             return ventaDetalle;

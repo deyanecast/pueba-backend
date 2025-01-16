@@ -1,7 +1,7 @@
 using MiBackend.DTOs.Requests;
 using MiBackend.Models;
 
-namespace MiBackend.Strategies
+namespace MiBackend.Interfaces
 {
     public interface IVentaItemStrategy
     {

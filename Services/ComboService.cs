@@ -2,94 +2,99 @@ using Microsoft.EntityFrameworkCore;
 using MiBackend.Data;
 using MiBackend.DTOs.Requests;
 using MiBackend.DTOs.Responses;
+using MiBackend.Interfaces;
 using MiBackend.Interfaces.Services;
 using MiBackend.Models;
+using Microsoft.Extensions.Logging;
 
 namespace MiBackend.Services
 {
     public class ComboService : IComboService
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IUnitOfWork _unitOfWork;
         private readonly IProductoService _productoService;
+        private readonly ILogger<ComboService> _logger;
 
         public ComboService(
-            ApplicationDbContext context,
-            IProductoService productoService)
+            IUnitOfWork unitOfWork,
+            IProductoService productoService,
+            ILogger<ComboService> logger)
         {
-            _context = context;
+            _unitOfWork = unitOfWork;
             _productoService = productoService;
+            _logger = logger;
         }
 
         public async Task<ComboResponse> CreateComboAsync(CreateComboRequest request)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
+            try
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
+                await _unitOfWork.BeginTransactionAsync();
+
+                // Verificar productos y cargarlos en memoria
+                var productosIds = request.Productos.Select(p => p.ProductoId).Distinct().ToList();
+                var productos = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => productosIds.Contains(p.ProductoId))
+                    .ToDictionaryAsync(p => p.ProductoId, p => p);
+
+                // Verificar que todos los productos existan
+                var productosNoEncontrados = productosIds
+                    .Where(id => !productos.ContainsKey(id))
+                    .ToList();
+
+                if (productosNoEncontrados.Any())
                 {
-                    // Verificar productos y cargarlos en memoria
-                    var productosIds = request.Productos.Select(p => p.ProductoId).Distinct().ToList();
-                    var productos = await _context.Productos
-                        .AsNoTracking()
-                        .Where(p => productosIds.Contains(p.ProductoId))
-                        .ToDictionaryAsync(p => p.ProductoId, p => p);
+                    throw new KeyNotFoundException(
+                        $"Los siguientes productos no fueron encontrados: {string.Join(", ", productosNoEncontrados)}");
+                }
 
-                    // Verificar que todos los productos existan
-                    var productosNoEncontrados = productosIds
-                        .Where(id => !productos.ContainsKey(id))
-                        .ToList();
+                // Crear el combo
+                var combo = new Combo
+                {
+                    Nombre = request.Nombre,
+                    Descripcion = request.Descripcion,
+                    Precio = request.Precio,
+                    EstaActivo = true,
+                    UltimaActualizacion = DateTime.UtcNow
+                };
 
-                    if (productosNoEncontrados.Any())
-                    {
-                        throw new KeyNotFoundException(
-                            $"Los siguientes productos no fueron encontrados: {string.Join(", ", productosNoEncontrados)}");
-                    }
+                await _unitOfWork.Repository<Combo>().AddAsync(combo);
+                await _unitOfWork.SaveChangesAsync();
 
-                    // Crear el combo
-                    var combo = new Combo
-                    {
-                        Nombre = request.Nombre,
-                        Descripcion = request.Descripcion,
-                        Precio = request.Precio,
-                        EstaActivo = true,
-                        UltimaActualizacion = DateTime.UtcNow
-                    };
-
-                    _context.Combos.Add(combo);
-                    await _context.SaveChangesAsync();
-
-                    // Crear los detalles del combo
-                    var detalles = request.Productos.Select(detalle => new ComboDetalle
+                // Crear los detalles del combo
+                foreach (var detalle in request.Productos)
+                {
+                    var comboDetalle = new ComboDetalle
                     {
                         ComboId = combo.ComboId,
                         ProductoId = detalle.ProductoId,
                         CantidadLibras = detalle.CantidadLibras
-                    }).ToList();
-
-                    // Establecer el estado de los detalles como Added
-                    foreach (var detalle in detalles)
-                    {
-                        _context.Entry(detalle).State = EntityState.Added;
-                    }
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    // Cargar el combo completo
-                    return await GetComboByIdAsync(combo.ComboId);
+                    };
+                    await _unitOfWork.Repository<ComboDetalle>().AddAsync(comboDetalle);
                 }
-                catch (Exception)
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            });
+
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
+                // Cargar el combo completo
+                return await GetComboByIdAsync(combo.ComboId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al crear combo");
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
 
         public async Task<List<ComboResponse>> GetCombosAsync()
         {
-            var combos = await _context.Combos
+            var combos = await _unitOfWork.Repository<Combo>()
+                .Query()
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .OrderBy(c => c.Nombre)
                 .Select(c => new ComboResponse
                 {
                     ComboId = c.ComboId,
@@ -105,7 +110,7 @@ namespace MiBackend.Services
                             ComboDetalleId = cd.ComboDetalleId,
                             Producto = new ProductoResponse
                             {
-                                ProductoId = cd.Producto.ProductoId,
+                                ProductoId = cd.Producto!.ProductoId,
                                 Nombre = cd.Producto.Nombre,
                                 CantidadLibras = cd.Producto.CantidadLibras,
                                 PrecioPorLibra = cd.Producto.PrecioPorLibra,
@@ -116,9 +121,6 @@ namespace MiBackend.Services
                             CantidadLibras = cd.CantidadLibras
                         }).ToList()
                 })
-                .OrderBy(c => c.Nombre)
-                .AsSplitQuery()
-                .AsNoTracking()
                 .ToListAsync();
 
             return combos;
@@ -126,7 +128,11 @@ namespace MiBackend.Services
 
         public async Task<ComboResponse> GetComboByIdAsync(int id)
         {
-            var combo = await _context.Combos
+            var combo = await _unitOfWork.Repository<Combo>()
+                .Query()
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .Where(c => c.ComboId == id)
                 .Select(c => new ComboResponse
                 {
                     ComboId = c.ComboId,
@@ -142,7 +148,7 @@ namespace MiBackend.Services
                             ComboDetalleId = cd.ComboDetalleId,
                             Producto = new ProductoResponse
                             {
-                                ProductoId = cd.Producto.ProductoId,
+                                ProductoId = cd.Producto!.ProductoId,
                                 Nombre = cd.Producto.Nombre,
                                 CantidadLibras = cd.Producto.CantidadLibras,
                                 PrecioPorLibra = cd.Producto.PrecioPorLibra,
@@ -153,9 +159,7 @@ namespace MiBackend.Services
                             CantidadLibras = cd.CantidadLibras
                         }).ToList()
                 })
-                .AsSplitQuery()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.ComboId == id);
+                .FirstOrDefaultAsync();
 
             if (combo == null)
                 throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
@@ -165,8 +169,12 @@ namespace MiBackend.Services
 
         public async Task<List<ComboResponse>> GetActiveCombosAsync()
         {
-            var combos = await _context.Combos
+            var combos = await _unitOfWork.Repository<Combo>()
+                .Query()
                 .Where(c => c.EstaActivo)
+                .Include(c => c.ComboDetalles)
+                    .ThenInclude(cd => cd.Producto)
+                .OrderBy(c => c.Nombre)
                 .Select(c => new ComboResponse
                 {
                     ComboId = c.ComboId,
@@ -182,7 +190,7 @@ namespace MiBackend.Services
                             ComboDetalleId = cd.ComboDetalleId,
                             Producto = new ProductoResponse
                             {
-                                ProductoId = cd.Producto.ProductoId,
+                                ProductoId = cd.Producto!.ProductoId,
                                 Nombre = cd.Producto.Nombre,
                                 CantidadLibras = cd.Producto.CantidadLibras,
                                 PrecioPorLibra = cd.Producto.PrecioPorLibra,
@@ -193,9 +201,6 @@ namespace MiBackend.Services
                             CantidadLibras = cd.CantidadLibras
                         }).ToList()
                 })
-                .OrderBy(c => c.Nombre)
-                .AsSplitQuery()
-                .AsNoTracking()
                 .ToListAsync();
 
             return combos;
@@ -203,24 +208,35 @@ namespace MiBackend.Services
 
         public async Task<bool> UpdateComboStatusAsync(int id, bool isActive)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
+            try
             {
-                var combo = await _context.Combos.FindAsync(id);
+                await _unitOfWork.BeginTransactionAsync();
+
+                var combo = await _unitOfWork.Repository<Combo>().GetByIdAsync(id);
                 if (combo == null)
                     throw new KeyNotFoundException($"Combo con ID {id} no encontrado");
 
                 combo.EstaActivo = isActive;
                 combo.UltimaActualizacion = DateTime.UtcNow;
 
-                await _context.SaveChangesAsync();
+                _unitOfWork.Repository<Combo>().Update(combo);
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
                 return true;
-            });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar estado del combo");
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
 
         public async Task<bool> ValidateComboStockAsync(int comboId, decimal cantidad)
         {
-            var comboDetalles = await _context.ComboDetalles
+            var comboDetalles = await _unitOfWork.Repository<ComboDetalle>()
+                .Query()
                 .Where(cd => cd.ComboId == comboId)
                 .ToListAsync();
 
@@ -239,8 +255,8 @@ namespace MiBackend.Services
 
         public async Task<decimal> CalculateComboTotalAsync(int comboId, decimal cantidad)
         {
-            var combo = await _context.Combos
-                .AsNoTracking()
+            var combo = await _unitOfWork.Repository<Combo>()
+                .Query()
                 .FirstOrDefaultAsync(c => c.ComboId == comboId);
 
             if (combo == null)
@@ -250,6 +266,20 @@ namespace MiBackend.Services
                 throw new InvalidOperationException($"El combo no está activo");
 
             return combo.Precio * cantidad;
+        }
+
+        public async Task<decimal> GetPrecioComboAsync(int comboId)
+        {
+            var combo = await _unitOfWork.Repository<Combo>()
+                .Query()
+                .Where(c => c.ComboId == comboId)
+                .Select(c => new { c.Precio })
+                .FirstOrDefaultAsync();
+
+            if (combo == null)
+                throw new KeyNotFoundException($"Combo con ID {comboId} no encontrado");
+
+            return combo.Precio;
         }
     }
 } 

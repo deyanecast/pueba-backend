@@ -12,5 +12,6 @@ namespace MiBackend.Interfaces.Services
         Task<bool> UpdateComboStatusAsync(int id, bool isActive);
         Task<bool> ValidateComboStockAsync(int comboId, decimal cantidad);
         Task<decimal> CalculateComboTotalAsync(int comboId, decimal cantidad);
+        Task<decimal> GetPrecioComboAsync(int comboId);
     }
 } 
