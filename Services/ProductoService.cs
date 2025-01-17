@@ -30,100 +30,127 @@ namespace MiBackend.Services
 
         public async Task<List<ProductoResponse>> GetProductosAsync()
         {
-            if (_cache.TryGetValue(ALL_PRODUCTS_CACHE_KEY, out List<ProductoResponse> cachedProducts))
+            try
             {
-                return cachedProducts;
-            }
-
-            var productos = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .OrderBy(p => p.Nombre)
-                .Select(p => new ProductoResponse
+                if (_cache.TryGetValue(ALL_PRODUCTS_CACHE_KEY, out List<ProductoResponse> cachedProducts))
                 {
-                    ProductoId = p.ProductoId,
-                    Nombre = p.Nombre,
-                    CantidadLibras = p.CantidadLibras,
-                    PrecioPorLibra = p.PrecioPorLibra,
-                    TipoEmpaque = p.TipoEmpaque,
-                    EstaActivo = p.EstaActivo,
-                    UltimaActualizacion = p.UltimaActualizacion
-                })
-                .ToListAsync();
+                    return cachedProducts;
+                }
 
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(1);
+                var productos = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .OrderBy(p => p.Nombre)
+                    .Select(p => new ProductoResponse
+                    {
+                        ProductoId = p.ProductoId,
+                        Nombre = p.Nombre,
+                        CantidadLibras = p.CantidadLibras,
+                        PrecioPorLibra = p.PrecioPorLibra,
+                        TipoEmpaque = p.TipoEmpaque,
+                        EstaActivo = p.EstaActivo,
+                        UltimaActualizacion = p.UltimaActualizacion
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
 
-            _cache.Set(ALL_PRODUCTS_CACHE_KEY, productos, cacheEntryOptions);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1);
 
-            return productos;
+                _cache.Set(ALL_PRODUCTS_CACHE_KEY, productos, cacheEntryOptions);
+
+                return productos;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener todos los productos");
+                throw new InvalidOperationException("Error al obtener productos. Por favor, inténtelo de nuevo.", ex);
+            }
         }
 
         public async Task<List<ProductoResponse>> GetActiveProductosAsync()
         {
-            if (_cache.TryGetValue(ACTIVE_PRODUCTS_CACHE_KEY, out List<ProductoResponse> cachedProducts))
+            try
             {
-                return cachedProducts;
-            }
-
-            var productos = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .Where(p => p.EstaActivo)
-                .OrderBy(p => p.Nombre)
-                .Select(p => new ProductoResponse
+                if (_cache.TryGetValue(ACTIVE_PRODUCTS_CACHE_KEY, out List<ProductoResponse> cachedProducts))
                 {
-                    ProductoId = p.ProductoId,
-                    Nombre = p.Nombre,
-                    CantidadLibras = p.CantidadLibras,
-                    PrecioPorLibra = p.PrecioPorLibra,
-                    TipoEmpaque = p.TipoEmpaque,
-                    EstaActivo = p.EstaActivo,
-                    UltimaActualizacion = p.UltimaActualizacion
-                })
-                .ToListAsync();
+                    return cachedProducts;
+                }
 
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(1);
+                var productos = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.EstaActivo)
+                    .OrderBy(p => p.Nombre)
+                    .Select(p => new ProductoResponse
+                    {
+                        ProductoId = p.ProductoId,
+                        Nombre = p.Nombre,
+                        CantidadLibras = p.CantidadLibras,
+                        PrecioPorLibra = p.PrecioPorLibra,
+                        TipoEmpaque = p.TipoEmpaque,
+                        EstaActivo = p.EstaActivo,
+                        UltimaActualizacion = p.UltimaActualizacion
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
 
-            _cache.Set(ACTIVE_PRODUCTS_CACHE_KEY, productos, cacheEntryOptions);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1);
 
-            return productos;
+                _cache.Set(ACTIVE_PRODUCTS_CACHE_KEY, productos, cacheEntryOptions);
+
+                return productos;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener productos activos");
+                throw new InvalidOperationException("Error al obtener productos activos. Por favor, inténtelo de nuevo.", ex);
+            }
         }
 
         public async Task<ProductoResponse> GetProductoByIdAsync(int id)
         {
-            var cacheKey = $"PRODUCT_{id}";
-            if (_cache.TryGetValue(cacheKey, out ProductoResponse cachedProduct))
+            try
             {
-                return cachedProduct;
-            }
-
-            var producto = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .Where(p => p.ProductoId == id)
-                .Select(p => new ProductoResponse
+                var cacheKey = $"PRODUCT_{id}";
+                if (_cache.TryGetValue(cacheKey, out ProductoResponse cachedProduct))
                 {
-                    ProductoId = p.ProductoId,
-                    Nombre = p.Nombre,
-                    CantidadLibras = p.CantidadLibras,
-                    PrecioPorLibra = p.PrecioPorLibra,
-                    TipoEmpaque = p.TipoEmpaque,
-                    EstaActivo = p.EstaActivo,
-                    UltimaActualizacion = p.UltimaActualizacion
-                })
-                .FirstOrDefaultAsync();
+                    return cachedProduct;
+                }
 
-            if (producto == null)
-                throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
+                var producto = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.ProductoId == id)
+                    .Select(p => new ProductoResponse
+                    {
+                        ProductoId = p.ProductoId,
+                        Nombre = p.Nombre,
+                        CantidadLibras = p.CantidadLibras,
+                        PrecioPorLibra = p.PrecioPorLibra,
+                        TipoEmpaque = p.TipoEmpaque,
+                        EstaActivo = p.EstaActivo,
+                        UltimaActualizacion = p.UltimaActualizacion
+                    })
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
 
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetSize(1);
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {id} no encontrado");
 
-            _cache.Set(cacheKey, producto, cacheEntryOptions);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1);
 
-            return producto;
+                _cache.Set(cacheKey, producto, cacheEntryOptions);
+
+                return producto;
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException)
+            {
+                _logger.LogError(ex, "Error al obtener producto por ID {ProductoId}", id);
+                throw new InvalidOperationException($"Error al obtener producto: {ex.Message}", ex);
+            }
         }
 
         public async Task<ProductoResponse> CreateProductoAsync(CreateProductoRequest request)
@@ -238,54 +265,102 @@ namespace MiBackend.Services
 
         public async Task<bool> ValidateProductoStockAsync(int productoId, decimal cantidadRequerida)
         {
-            var producto = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .Where(p => p.ProductoId == productoId)
-                .FirstOrDefaultAsync();
+            try
+            {
+                var producto = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.ProductoId == productoId)
+                    .Select(p => new { p.CantidadLibras, p.EstaActivo })
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
 
-            if (producto == null)
-                throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
 
-            if (!producto.EstaActivo)
-                throw new InvalidOperationException($"El producto {producto.Nombre} no está activo");
+                if (!producto.EstaActivo)
+                    throw new InvalidOperationException($"El producto con ID {productoId} no está activo");
 
-            return producto.CantidadLibras >= cantidadRequerida;
+                return producto.CantidadLibras >= cantidadRequerida;
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException && ex is not InvalidOperationException)
+            {
+                _logger.LogError(ex, "Error al validar stock del producto {ProductoId}", productoId);
+                throw new InvalidOperationException($"Error al validar stock: {ex.Message}", ex);
+            }
         }
 
         public async Task<decimal> CalculateProductoTotalAsync(int productoId, decimal cantidad)
         {
-            var producto = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .FirstOrDefaultAsync(p => p.ProductoId == productoId);
+            try
+            {
+                var producto = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.ProductoId == productoId)
+                    .Select(p => new { p.PrecioPorLibra, p.EstaActivo })
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
 
-            if (producto == null)
-                throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+                if (producto == null)
+                    throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
 
-            if (!producto.EstaActivo)
-                throw new InvalidOperationException($"El producto no está activo");
+                if (!producto.EstaActivo)
+                    throw new InvalidOperationException($"El producto no está activo");
 
-            return producto.PrecioPorLibra * cantidad;
+                return producto.PrecioPorLibra * cantidad;
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException && ex is not InvalidOperationException)
+            {
+                _logger.LogError(ex, "Error al calcular total del producto {ProductoId}", productoId);
+                throw new InvalidOperationException($"Error al calcular total: {ex.Message}", ex);
+            }
         }
 
         public async Task<decimal> GetPrecioProductoAsync(int productoId)
         {
-            var producto = await _unitOfWork.Repository<Producto>()
-                .Query()
-                .Where(p => p.ProductoId == productoId)
-                .Select(p => new { p.PrecioPorLibra })
-                .FirstOrDefaultAsync();
+            try
+            {
+                var cacheKey = $"PRODUCT_PRICE_{productoId}";
+                if (_cache.TryGetValue(cacheKey, out decimal cachedPrice))
+                {
+                    return cachedPrice;
+                }
 
-            if (producto == null)
-                throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+                var producto = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.ProductoId == productoId)
+                    .Select(p => p.PrecioPorLibra)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
 
-            return producto.PrecioPorLibra;
+                if (producto == 0)
+                    throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
+
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1);
+
+                _cache.Set(cacheKey, producto, cacheEntryOptions);
+
+                return producto;
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException)
+            {
+                _logger.LogError(ex, "Error al obtener precio del producto {ProductoId}", productoId);
+                throw new InvalidOperationException($"Error al obtener precio: {ex.Message}", ex);
+            }
         }
 
         public async Task<bool> UpdateProductoStockAsync(int productoId, decimal cantidadAjuste)
         {
             try
             {
-                var producto = await _unitOfWork.Repository<Producto>().GetByIdAsync(productoId);
+                await using var transaction = await _unitOfWork.BeginTransactionAsync();
+
+                var producto = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.ProductoId == productoId)
+                    .FirstOrDefaultAsync();
+
                 if (producto == null)
                     throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
 
@@ -301,13 +376,57 @@ namespace MiBackend.Services
 
                 _unitOfWork.Repository<Producto>().Update(producto);
                 await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+
+                // Invalidar caché relacionado
+                InvalidateCache();
+                _cache.Remove($"PRODUCT_{productoId}");
+                _cache.Remove($"PRODUCT_PRICE_{productoId}");
 
                 return true;
             }
+            catch (Exception ex) when (ex is not KeyNotFoundException && ex is not InvalidOperationException)
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                _logger.LogError(ex, "Error al actualizar stock del producto {ProductoId}", productoId);
+                throw new InvalidOperationException($"Error al actualizar stock: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<List<ProductoStockBajoResponse>> GetProductosStockBajoAsync()
+        {
+            try
+            {
+                const string cacheKey = "PRODUCTOS_STOCK_BAJO";
+                if (_cache.TryGetValue(cacheKey, out List<ProductoStockBajoResponse> cachedProducts))
+                {
+                    return cachedProducts;
+                }
+
+                var productos = await _unitOfWork.Repository<Producto>()
+                    .Query()
+                    .Where(p => p.CantidadLibras < 10 && p.EstaActivo)
+                    .Select(p => new ProductoStockBajoResponse
+                    {
+                        ProductoId = p.ProductoId,
+                        Nombre = p.Nombre,
+                        CantidadLibras = p.CantidadLibras
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                    .SetSize(1);
+
+                _cache.Set(cacheKey, productos, cacheEntryOptions);
+
+                return productos;
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al actualizar stock del producto {ProductoId}", productoId);
-                throw;
+                _logger.LogError(ex, "Error al obtener productos con stock bajo");
+                throw new InvalidOperationException("Error al obtener productos con stock bajo. Por favor, inténtelo de nuevo.", ex);
             }
         }
 

@@ -28,10 +28,17 @@ builder.Services.AddCors(options =>
 });
 
 // Configure DbContext
-var connectionString = $"Host={builder.Configuration["DB_HOST"]};Database={builder.Configuration["DB_DATABASE"]};Username={builder.Configuration["DB_USERNAME"]};Password={builder.Configuration["DB_PASSWORD"]};Port={builder.Configuration["DB_PORT"]}";
+var connectionString = $"Host={builder.Configuration["DB_HOST"]};Database={builder.Configuration["DB_DATABASE"]};Username={builder.Configuration["DB_USERNAME"]};Password={builder.Configuration["DB_PASSWORD"]};Port={builder.Configuration["DB_PORT"]};Timeout=30;Command Timeout=30;Max Pool Size=100;Pooling=true;";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorCodesToAdd: null);
+        npgsqlOptions.CommandTimeout(30);
+    }));
 
 // Register Unit of Work
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
