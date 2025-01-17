@@ -4,140 +4,149 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using MiBackend.Models;
+using MiBackend.Interfaces;
+using MiBackend.DTOs.Responses;
+using MiBackend.Interfaces.Services;
 
-public class CategoriaService
+namespace MiBackend.Services
 {
-    private readonly IMemoryCache _cache;
-    private readonly ILogger<CategoriaService> _logger;
-    private readonly IUnitOfWork _unitOfWork;
-
-    public CategoriaService(IMemoryCache cache, ILogger<CategoriaService> logger, IUnitOfWork unitOfWork)
+    public class CategoriaService : ICategoriaService
     {
-        _cache = cache;
-        _logger = logger;
-        _unitOfWork = unitOfWork;
-    }
+        private readonly IMemoryCache _cache;
+        private readonly ILogger<CategoriaService> _logger;
+        private readonly IUnitOfWork _unitOfWork;
+        private const string ALL_CATEGORIES_CACHE_KEY = "ALL_CATEGORIES";
 
-    public async Task<List<CategoriaResponse>> GetCategoriasAsync()
-    {
-        try
+        public CategoriaService(IMemoryCache cache, ILogger<CategoriaService> logger, IUnitOfWork unitOfWork)
         {
-            if (_cache.TryGetValue(ALL_CATEGORIES_CACHE_KEY, out List<CategoriaResponse> cachedCategories))
+            _cache = cache;
+            _logger = logger;
+            _unitOfWork = unitOfWork;
+        }
+
+        public async Task<List<CategoriaResponse>> GetCategoriasAsync()
+        {
+            try
             {
-                return cachedCategories;
-            }
-
-            var categorias = await _unitOfWork.Repository<Categoria>()
-                .Query()
-                .OrderBy(c => c.Nombre)
-                .Select(c => new CategoriaResponse
+                if (_cache.TryGetValue(ALL_CATEGORIES_CACHE_KEY, out List<CategoriaResponse> cachedCategories))
                 {
-                    CategoriaId = c.CategoriaId,
-                    Nombre = c.Nombre,
-                    Descripcion = c.Descripcion,
-                    EstaActivo = c.EstaActivo
-                })
-                .AsNoTracking()
-                .ToListAsync();
+                    return cachedCategories;
+                }
 
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
-                .SetSize(1);
+                var categorias = await _unitOfWork.Repository<Categoria>()
+                    .Query()
+                    .OrderBy(c => c.Nombre)
+                    .Select(c => new CategoriaResponse
+                    {
+                        CategoriaId = c.CategoriaId,
+                        Nombre = c.Nombre,
+                        Descripcion = c.Descripcion,
+                        EstaActivo = c.EstaActivo
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
 
-            _cache.Set(ALL_CATEGORIES_CACHE_KEY, categorias, cacheEntryOptions);
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                    .SetSize(1);
 
-            return categorias;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener todas las categorías");
-            throw new InvalidOperationException("Error al obtener categorías. Por favor, inténtelo de nuevo.", ex);
-        }
-    }
+                _cache.Set(ALL_CATEGORIES_CACHE_KEY, categorias, cacheEntryOptions);
 
-    public async Task<CategoriaResponse> GetCategoriaByIdAsync(int id)
-    {
-        try
-        {
-            var cacheKey = $"CATEGORY_{id}";
-            if (_cache.TryGetValue(cacheKey, out CategoriaResponse cachedCategory))
+                return categorias;
+            }
+            catch (Exception ex)
             {
-                return cachedCategory;
+                _logger.LogError(ex, "Error al obtener todas las categorías");
+                throw new InvalidOperationException("Error al obtener categorías. Por favor, inténtelo de nuevo.", ex);
             }
-
-            var categoria = await _unitOfWork.Repository<Categoria>()
-                .Query()
-                .Where(c => c.CategoriaId == id)
-                .Select(c => new CategoriaResponse
-                {
-                    CategoriaId = c.CategoriaId,
-                    Nombre = c.Nombre,
-                    Descripcion = c.Descripcion,
-                    EstaActivo = c.EstaActivo
-                })
-                .AsNoTracking()
-                .FirstOrDefaultAsync();
-
-            if (categoria == null)
-                throw new KeyNotFoundException($"Categoría con ID {id} no encontrada");
-
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
-                .SetSize(1);
-
-            _cache.Set(cacheKey, categoria, cacheEntryOptions);
-
-            return categoria;
         }
-        catch (Exception ex) when (ex is not KeyNotFoundException)
-        {
-            _logger.LogError(ex, "Error al obtener categoría por ID {CategoriaId}", id);
-            throw new InvalidOperationException($"Error al obtener categoría: {ex.Message}", ex);
-        }
-    }
 
-    public async Task<List<CategoriaResponse>> GetActiveCategoriasAsync()
-    {
-        try
+        public async Task<CategoriaResponse> GetCategoriaByIdAsync(int id)
         {
-            var cacheKey = "ACTIVE_CATEGORIES";
-            if (_cache.TryGetValue(cacheKey, out List<CategoriaResponse> cachedCategories))
+            try
             {
-                return cachedCategories;
-            }
-
-            var categorias = await _unitOfWork.Repository<Categoria>()
-                .Query()
-                .Where(c => c.EstaActivo)
-                .OrderBy(c => c.Nombre)
-                .Select(c => new CategoriaResponse
+                var cacheKey = $"CATEGORY_{id}";
+                if (_cache.TryGetValue(cacheKey, out CategoriaResponse cachedCategory))
                 {
-                    CategoriaId = c.CategoriaId,
-                    Nombre = c.Nombre,
-                    Descripcion = c.Descripcion,
-                    EstaActivo = c.EstaActivo
-                })
-                .AsNoTracking()
-                .ToListAsync();
+                    return cachedCategory;
+                }
 
-            var cacheEntryOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(10))
-                .SetSize(1);
+                var categoria = await _unitOfWork.Repository<Categoria>()
+                    .Query()
+                    .Where(c => c.CategoriaId == id)
+                    .Select(c => new CategoriaResponse
+                    {
+                        CategoriaId = c.CategoriaId,
+                        Nombre = c.Nombre,
+                        Descripcion = c.Descripcion,
+                        EstaActivo = c.EstaActivo
+                    })
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync();
 
-            _cache.Set(cacheKey, categorias, cacheEntryOptions);
+                if (categoria == null)
+                    throw new KeyNotFoundException($"Categoría con ID {id} no encontrada");
 
-            return categorias;
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                    .SetSize(1);
+
+                _cache.Set(cacheKey, categoria, cacheEntryOptions);
+
+                return categoria;
+            }
+            catch (Exception ex) when (ex is not KeyNotFoundException)
+            {
+                _logger.LogError(ex, "Error al obtener categoría por ID {CategoriaId}", id);
+                throw new InvalidOperationException($"Error al obtener categoría: {ex.Message}", ex);
+            }
         }
-        catch (Exception ex)
+
+        public async Task<List<CategoriaResponse>> GetActiveCategoriasAsync()
         {
-            _logger.LogError(ex, "Error al obtener categorías activas");
-            throw new InvalidOperationException("Error al obtener categorías activas. Por favor, inténtelo de nuevo.", ex);
-        }
-    }
+            try
+            {
+                var cacheKey = "ACTIVE_CATEGORIES";
+                if (_cache.TryGetValue(cacheKey, out List<CategoriaResponse> cachedCategories))
+                {
+                    return cachedCategories;
+                }
 
-    private void InvalidateCache()
-    {
-        _cache.Remove(ALL_CATEGORIES_CACHE_KEY);
-        _cache.Remove("ACTIVE_CATEGORIES");
+                var categorias = await _unitOfWork.Repository<Categoria>()
+                    .Query()
+                    .Where(c => c.EstaActivo)
+                    .OrderBy(c => c.Nombre)
+                    .Select(c => new CategoriaResponse
+                    {
+                        CategoriaId = c.CategoriaId,
+                        Nombre = c.Nombre,
+                        Descripcion = c.Descripcion,
+                        EstaActivo = c.EstaActivo
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                    .SetSize(1);
+
+                _cache.Set(cacheKey, categorias, cacheEntryOptions);
+
+                return categorias;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener categorías activas");
+                throw new InvalidOperationException("Error al obtener categorías activas. Por favor, inténtelo de nuevo.", ex);
+            }
+        }
+
+        private void InvalidateCache()
+        {
+            _cache.Remove(ALL_CATEGORIES_CACHE_KEY);
+            _cache.Remove("ACTIVE_CATEGORIES");
+        }
     }
 } 

@@ -328,20 +328,19 @@ namespace MiBackend.Services
                 var producto = await _unitOfWork.Repository<Producto>()
                     .Query()
                     .Where(p => p.ProductoId == productoId)
-                    .Select(p => p.PrecioPorLibra)
-                    .AsNoTracking()
+                    .Select(p => new { p.PrecioPorLibra })
                     .FirstOrDefaultAsync();
 
-                if (producto == 0)
+                if (producto == null)
                     throw new KeyNotFoundException($"Producto con ID {productoId} no encontrado");
 
                 var cacheEntryOptions = new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(5))
                     .SetSize(1);
 
-                _cache.Set(cacheKey, producto, cacheEntryOptions);
+                _cache.Set(cacheKey, producto.PrecioPorLibra, cacheEntryOptions);
 
-                return producto;
+                return producto.PrecioPorLibra;
             }
             catch (Exception ex) when (ex is not KeyNotFoundException)
             {
@@ -354,7 +353,7 @@ namespace MiBackend.Services
         {
             try
             {
-                await using var transaction = await _unitOfWork.BeginTransactionAsync();
+                await _unitOfWork.BeginTransactionAsync();
 
                 var producto = await _unitOfWork.Repository<Producto>()
                     .Query()
